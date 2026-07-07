@@ -166,13 +166,10 @@ export function createScene(course: Course): Scene3D {
       // ── Chassis ────────────────────────────────────────────────────────────
       const ct = vehicle.chassis.translation()
       const cr = vehicle.chassis.rotation()
-      vehicleMeshes.chassis.position.set(ct.x, ct.y, CHASSIS_Z)
-      vehicleMeshes.chassis.rotation.z = cr
 
-      // Keep group at chassis position so all children move together
+      // Keep the group at the chassis world position so all children move
+      // together; the chassis mesh itself sits at the group-local origin.
       vehicleMeshes.group.position.set(ct.x, ct.y, 0)
-
-      // Chassis mesh is in group-local space → reset its world offset
       vehicleMeshes.chassis.position.set(0, 0, CHASSIS_Z)
       vehicleMeshes.chassis.rotation.z = cr
 

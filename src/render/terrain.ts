@@ -86,7 +86,7 @@ export function buildTerrainStrip(ground: Point[]): {
   const vertCount = 4 * n
   const positions = new Float32Array(vertCount * 3)
   const colors = new Float32Array(vertCount * 3)
-  const indices = new Uint32Array((n - 1) * 12) // 4 tris per segment * 3 = 12 per seg? Let's do 2 faces (top+front wall)
+  const indices = new Uint32Array((n - 1) * 12) // 2 quads (top + front wall) × 2 tris × 3 verts = 12 per segment
 
   // Layout per point i:
   //   vIdx 4i+0: top-front (x, y, zFront)
