@@ -163,6 +163,11 @@ export async function startGame(root: HTMLElement): Promise<void> {
         vehicle.setThrottle(0)
       }
 
+      // Self-right / anti-stuck assist runs every step (all phases) so the car
+      // can never stay flipped or wedged; it's a no-op unless the chassis is
+      // tilted well past normal driving, so it doesn't affect the race feel.
+      vehicle.stabilize()
+
       world.step()
     }
 

@@ -140,7 +140,10 @@ describe('SLOPE differentiation', () => {
 describe('EGGS differentiation', () => {
   it('line advances past the eggs where circle plateaus at the first egg', async () => {
     // Start just before the first egg (eggs at x = 185,190,195,200,205).
-    const start = { x: 182, y: 15 }
+    // y spawns ~2 m above the eggs-zone ground (plateau ≈ 6 m after the uphill
+    // peak was lowered to keep the course circle-traversable) so the vehicle
+    // settles into a clean flat pose before hitting the eggs.
+    const start = { x: 182, y: 8 }
     const circle = await runOnCourse('circle', start, 1, 600)
     const line = await runOnCourse('line', start, 1, 600)
 

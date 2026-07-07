@@ -67,6 +67,39 @@ const MAX_MOTOR_SPEED = 20.0
  */
 const MOTOR_FACTOR = 50.0
 
+// ─── Self-right / anti-stuck assist constants ─────────────────────────────────
+
+/**
+ * Chassis tilt (radians) beyond which the self-right assist engages. ~55°.
+ * Chosen large so it only fires in genuine recovery situations (car pitched
+ * onto its side / flipped): normal driving and every Task 8 differentiation
+ * scenario stay well below this, so the assist NEVER interferes with them.
+ */
+const SELF_RIGHT_THRESHOLD = 0.96 // rad (~55°)
+
+/**
+ * Base corrective angular impulse (N·m·s) applied every recovery step, in the
+ * upright direction. A constant floor guarantees the assist can un-wedge a
+ * chassis that is fully flipped and pinned against terrain with its wheel motors
+ * still running — a purely tilt-proportional torque was too weak at large tilt
+ * and let the car stay stuck.
+ */
+const SELF_RIGHT_BASE_IMPULSE = 1.2
+
+/**
+ * Additional corrective impulse per radian of tilt past the threshold
+ * (N·m·s/rad). Scales the nudge with how far over the car is, so a mild lean
+ * gets a mild correction and a full flip gets a firm one.
+ */
+const SELF_RIGHT_GAIN = 1.0
+
+/**
+ * Angular-velocity damping applied alongside the corrective impulse while
+ * recovering. Bleeds off spin so the chassis settles upright instead of
+ * oscillating past vertical. Fraction of current angvel removed per step.
+ */
+const SELF_RIGHT_ANGVEL_DAMP = 0.15
+
 // ─── Slide-mode (line/ski) drive constants ────────────────────────────────────
 
 /**
@@ -146,6 +179,15 @@ export interface Vehicle {
    * applies the ski's governed forward impulse for 'slide' shapes.
    */
   applyDrive(): void
+  /**
+   * Self-right / anti-stuck assist. MUST be called once per physics step (after
+   * `applyDrive()`, before `world.step()`). When the chassis tilt exceeds a
+   * large recovery threshold it applies a gentle corrective torque toward
+   * upright so the car can never be permanently flipped/wedged. Below the
+   * threshold it is a no-op, so normal driving and the Task 8 differentiation
+   * scenarios are unaffected.
+   */
+  stabilize(): void
   /** Replace both wheel colliders live to match `shape` (anti-pop). */
   swapShape(shape: ShapeId): void
   /** The shape currently mounted on the wheels. */
@@ -337,6 +379,27 @@ export function createVehicle(world: PhysicsWorld, at: Point): Vehicle {
       } else {
         driveMotors()
       }
+    },
+
+    stabilize(): void {
+      // Wrap rotation to [-π, π] so tilt magnitude is measured the short way.
+      const raw = chassis.rotation()
+      const angle = Math.atan2(Math.sin(raw), Math.cos(raw))
+      const tilt = Math.abs(angle)
+      if (tilt <= SELF_RIGHT_THRESHOLD) return // upright enough — no interference
+
+      // Corrective impulse toward upright: a constant floor (to un-wedge a
+      // pinned flip) plus a term scaled by how far past the threshold we are.
+      // Sign points back to angle 0 (−sign(angle)).
+      const excess = tilt - SELF_RIGHT_THRESHOLD
+      const magnitude = SELF_RIGHT_BASE_IMPULSE + SELF_RIGHT_GAIN * excess
+      const corrective = -Math.sign(angle) * magnitude
+      chassis.applyTorqueImpulse(corrective, true)
+
+      // Bleed off spin so the chassis settles instead of oscillating past
+      // vertical (over-correcting into a flip the other way).
+      const w = chassis.angvel()
+      chassis.setAngvel(w * (1 - SELF_RIGHT_ANGVEL_DAMP), true)
     },
 
     currentShape(): ShapeId {
