@@ -25,15 +25,35 @@ describe('Shape catalog', () => {
     })
   })
 
-  describe('Drive modes', () => {
-    it('line has driveMode: slide', () => {
-      expect(SHAPES.line.driveMode).toBe('slide')
+  describe('Tuning fields (stable-hybrid model)', () => {
+    it('every shape has a finite, positive wheelRadiusMul', () => {
+      SHAPE_IDS.forEach((shapeId) => {
+        const mul = SHAPES[shapeId].wheelRadiusMul
+        expect(Number.isFinite(mul)).toBe(true)
+        expect(mul).toBeGreaterThan(0)
+      })
     })
 
-    it('circle, square, triangle have driveMode: roll', () => {
-      expect(SHAPES.circle.driveMode).toBe('roll')
-      expect(SHAPES.square.driveMode).toBe('roll')
-      expect(SHAPES.triangle.driveMode).toBe('roll')
+    it('every shape has a finite, positive speedMul', () => {
+      SHAPE_IDS.forEach((shapeId) => {
+        const mul = SHAPES[shapeId].speedMul
+        expect(Number.isFinite(mul)).toBe(true)
+        expect(mul).toBeGreaterThan(0)
+      })
+    })
+
+    it('circle is the flat-speed reference (fastest speedMul)', () => {
+      const max = Math.max(...SHAPE_IDS.map((id) => SHAPES[id].speedMul))
+      expect(SHAPES.circle.speedMul).toBe(max)
+    })
+
+    it('line has the largest effective radius (best over the eggs / rough)', () => {
+      const max = Math.max(...SHAPE_IDS.map((id) => SHAPES[id].wheelRadiusMul))
+      expect(SHAPES.line.wheelRadiusMul).toBe(max)
+    })
+
+    it('circle is faster than square on flat (speedMul)', () => {
+      expect(SHAPES.circle.speedMul).toBeGreaterThan(SHAPES.square.speedMul)
     })
   })
 
@@ -55,13 +75,14 @@ describe('Shape catalog', () => {
       })
     })
 
-    it('line friction is lower than circle friction', () => {
-      expect(SHAPES.line.friction).toBeLessThan(SHAPES.circle.friction)
+    it('square and triangle grip harder than the circle (higher friction)', () => {
+      expect(SHAPES.square.friction).toBeGreaterThan(SHAPES.circle.friction)
+      expect(SHAPES.triangle.friction).toBeGreaterThan(SHAPES.circle.friction)
     })
 
-    it('square and triangle friction are >= circle friction', () => {
-      expect(SHAPES.square.friction).toBeGreaterThanOrEqual(SHAPES.circle.friction)
-      expect(SHAPES.triangle.friction).toBeGreaterThanOrEqual(SHAPES.circle.friction)
+    it('triangle is the grippiest shape (best on the slope)', () => {
+      const max = Math.max(...SHAPE_IDS.map((id) => SHAPES[id].friction))
+      expect(SHAPES.triangle.friction).toBe(max)
     })
   })
 
