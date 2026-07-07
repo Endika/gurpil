@@ -231,7 +231,17 @@ export function createVehicle(world: PhysicsWorld, at: Point): Vehicle {
   const raw = world.raw
 
   // ── Chassis ──────────────────────────────────────────────────────────────
-  const chassisDesc = RAPIER.RigidBodyDesc.dynamic().setTranslation(at.x, at.y)
+  // Anti-sleep (playtest "se queda bloqueado" fix): Rapier auto-sleeps bodies
+  // that stay at rest for ~2 s. A sleeping body ignores joint-motor velocity
+  // targets, so once the car had settled (the player pausing before drawing, or
+  // after a slow crawl) `setThrottle()` silently did nothing and the car was
+  // stuck forever. Keeping the chassis and wheels permanently awake costs almost
+  // nothing for one vehicle and guarantees the motor always responds. This flag
+  // is the single source of truth for the behaviour — do NOT rely on ad-hoc
+  // wakeUp() calls scattered through the drive code.
+  const chassisDesc = RAPIER.RigidBodyDesc.dynamic()
+    .setTranslation(at.x, at.y)
+    .setCanSleep(false)
   const chassis = raw.createRigidBody(chassisDesc)
 
   const chassisCollider = RAPIER.ColliderDesc.cuboid(CHASSIS_HALF_W, CHASSIS_HALF_H)
@@ -256,8 +266,10 @@ export function createVehicle(world: PhysicsWorld, at: Point): Vehicle {
     const wx = at.x + offset.x
     const wy = at.y + offset.y
 
+    // setCanSleep(false): see the chassis anti-sleep note above — a sleeping
+    // wheel would freeze its motor and leave the car stuck.
     const wheelBody = raw.createRigidBody(
-      RAPIER.RigidBodyDesc.dynamic().setTranslation(wx, wy),
+      RAPIER.RigidBodyDesc.dynamic().setTranslation(wx, wy).setCanSleep(false),
     )
 
     const collider = raw.createCollider(

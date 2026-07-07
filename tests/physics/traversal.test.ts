@@ -34,6 +34,19 @@ beforeAll(async () => {
 /** Steps to let the vehicle settle on the terrain before driving. */
 const SETTLE_STEPS = 60
 
+/**
+ * Steps to let the vehicle settle to a DEAD STOP before driving.
+ *
+ * Rapier auto-sleeps a resting body after ~2 s (~120 steps at 1/60 s). This is
+ * comfortably past that threshold, so these tests reproduce the real
+ * "se queda bloqueado" playtest bug: a car that has fully come to rest (the
+ * player pausing, or the car crawling to a halt) must still be able to drive off
+ * from a standstill. Before the anti-sleep fix (`setCanSleep(false)` on the
+ * chassis + wheels), the motor's velocity target was ignored on a sleeping body
+ * and the car never moved.
+ */
+const REST_SETTLE_STEPS = 300
+
 /** Generous per-step cap for a full-course drive. */
 const MAX_STEPS = 6000
 
@@ -57,6 +70,28 @@ function driveStep(vehicle: Vehicle, world: { step(): void }): void {
   vehicle.applyDrive()
   vehicle.stabilize()
   world.step()
+}
+
+/**
+ * Spawn a circle-wheeled vehicle at `(startX, startY)`, let it settle to a DEAD
+ * STOP (past Rapier's sleep threshold), then apply full throttle from that
+ * standstill and drive until the finish or `MAX_STEPS`. Returns the furthest x
+ * reached. Reproduces the "stuck from a standstill" playtest condition.
+ */
+async function driveFromRest(startX: number, startY: number): Promise<number> {
+  const course = buildCourse()
+  const world = await createWorld(course)
+  const vehicle = createVehicle(world, { x: startX, y: startY })
+  for (let i = 0; i < REST_SETTLE_STEPS; i++) world.step()
+
+  vehicle.setThrottle(1)
+  let maxX = -Infinity
+  for (let i = 0; i < MAX_STEPS; i++) {
+    driveStep(vehicle, world)
+    maxX = Math.max(maxX, vehicle.position().x)
+    if (maxX >= X_FINISH) break
+  }
+  return maxX
 }
 
 // ─── Rocky traversal: the car must not wedge in the rocks ────────────────────
@@ -147,6 +182,34 @@ describe('full-course reachability (circle)', () => {
     // line/ski is the shape meant to clear them (see differentiation EGGS test),
     // so this is intended difficulty, NOT a stuck/dead-end bug. Reaching the eggs
     // approach proves no zone before them is a dead end.
+    expect(maxX).toBeGreaterThanOrEqual(X_EGGS_APPROACH)
+  })
+})
+
+// ─── From a DEAD STOP: the car must never be permanently stuck ────────────────
+
+describe('traversal from a standstill (anti-sleep)', () => {
+  // These three cover the exact playtest report: the car has come to a complete
+  // stop and refuses to move. Each spawns 2 m above the local ground so the
+  // vehicle settles cleanly ON the terrain (never inside it), then drives off
+  // from rest after Rapier would have put it to sleep. Reaching the eggs zone
+  // proves the whole rocky+uphill+mud+ice stretch is clearable from a standstill
+  // anywhere; the eggs themselves remain the circle's by-design wall.
+
+  it('drives off from a dead stop on the flat start zone', async () => {
+    const maxX = await driveFromRest(5, 2)
+    expect(maxX).toBeGreaterThanOrEqual(X_EGGS_APPROACH)
+  })
+
+  it('drives off from a dead stop settled on a rocky bump', async () => {
+    // Rocky zone spans x=[20,50); spawn mid-zone above the bumps.
+    const maxX = await driveFromRest(35, 3)
+    expect(maxX).toBeGreaterThanOrEqual(X_EGGS_APPROACH)
+  })
+
+  it('drives off from a dead stop settled on the uphill ramp', async () => {
+    // Uphill ramp spans x=[50,90); spawn mid-ramp above the slope.
+    const maxX = await driveFromRest(70, 6)
     expect(maxX).toBeGreaterThanOrEqual(X_EGGS_APPROACH)
   })
 })
