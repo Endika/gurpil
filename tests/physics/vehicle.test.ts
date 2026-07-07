@@ -36,6 +36,9 @@ const MIN_FORWARD_DISPLACEMENT = 1.5
 /** Maximum allowed drift with zero throttle after settling (metres). */
 const MAX_ZERO_THROTTLE_DRIFT = 0.5
 
+/** Maximum allowed chassis x-velocity with zero throttle (m/s). */
+const MAX_ZERO_THROTTLE_VELOCITY = 0.5
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe('createVehicle', () => {
@@ -96,5 +99,10 @@ describe('zero throttle / no drift', () => {
     const drift = Math.abs(xAfter - xBefore)
 
     expect(drift).toBeLessThan(MAX_ZERO_THROTTLE_DRIFT)
+
+    // Also assert the chassis isn't accumulating forward speed: a regression
+    // that disabled the motor at throttle 0 could pass the displacement bound
+    // on flat ground while silently rolling. Velocity must stay near zero.
+    expect(Math.abs(vehicle.chassis.linvel().x)).toBeLessThan(MAX_ZERO_THROTTLE_VELOCITY)
   })
 })
