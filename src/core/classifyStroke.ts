@@ -81,7 +81,8 @@ const RESAMPLE_COUNT = 32
 const LINE_ASPECT_THRESHOLD = 3.5
 
 /**
- * Maximum perpendicular residual (as a fraction of the stroke's total extent)
+ * Maximum perpendicular residual (as a fraction of the start-to-end chord
+ * length; falls back to the bounding-box diagonal when the chord is degenerate)
  * below which the stroke is treated as "nearly straight" for line detection.
  */
 const LINE_RESIDUAL_THRESHOLD = 0.12
