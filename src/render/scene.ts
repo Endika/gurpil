@@ -25,7 +25,9 @@ import * as THREE from 'three'
 import type { Course } from '../core/course'
 import type { Vehicle } from '../physics/vehicle'
 import { SHAPES } from '../core/shapes'
+import type { ShapeId } from '../core/shapes'
 import { buildTerrainMesh, buildObstacleMeshes } from './terrain'
+import { wheelGeometry } from './wheelMesh'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -57,9 +59,6 @@ const MONIGOTE_Z = 0.1
 const CHASSIS_HALF_W = 1.0
 const CHASSIS_HALF_H = 0.3
 
-/** Visual wheel radius (matches physics). */
-const WHEEL_RADIUS = 0.35
-
 /** Monigote body half-extents (metres). */
 const BODY_HALF_W = 0.22
 const BODY_HALF_H = 0.35
@@ -69,6 +68,29 @@ const HEAD_RADIUS = 0.2
 
 /** Pixel ratio cap to limit GPU load on high-DPI mobile. */
 const MAX_PIXEL_RATIO = 2
+
+// ─── Juice animation constants ────────────────────────────────────────────────
+
+/**
+ * Peak scale multiplier during the swap pop (applied to wheel meshes).
+ * 1.35 gives a snappy but not jarring "pop".
+ */
+const JUICE_SCALE_PEAK = 1.35
+
+/**
+ * Total duration of the scale-pop animation in seconds.
+ * Pop reaches peak at half this time, then eases back to 1.
+ */
+const JUICE_SCALE_DURATION = 0.25
+
+/**
+ * Total duration of the color-flash animation in seconds.
+ * Briefly flashes white then settles to the shape's color.
+ */
+const JUICE_FLASH_DURATION = 0.18
+
+/** Color used for the flash peak (pure white). */
+const JUICE_FLASH_COLOR = 0xffffff
 
 // ─── Sky / lighting colors ────────────────────────────────────────────────────
 
@@ -92,6 +114,19 @@ interface VehicleMeshes {
   wheels: THREE.Mesh[]
   monigoteBody: THREE.Mesh
   monigoteHead: THREE.Mesh
+}
+
+/**
+ * Juice animation state, tracked per shape-swap event.
+ * Both timers count upward from 0; animation is active while < duration.
+ */
+interface JuiceState {
+  /** Elapsed time in the scale-pop animation (seconds). */
+  scaleElapsed: number
+  /** Elapsed time in the color-flash animation (seconds). */
+  flashElapsed: number
+  /** Target shape color (settled state after flash). */
+  targetColor: THREE.Color
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -161,8 +196,20 @@ export function createScene(course: Course): Scene3D {
   // ── Camera x state (lerp target) ─────────────────────────────────────────────
   let camX = course.startX
 
+  // ── Shape swap tracking ───────────────────────────────────────────────────────
+  // Track which shape is currently displayed so we can detect a swap each frame.
+  let lastShape: ShapeId = 'circle'
+
+  // ── Internal clock for framerate-independent juice animation ─────────────────
+  const clock = new THREE.Clock()
+
+  // Active juice state — null when no animation is running.
+  let juice: JuiceState | null = null
+
   return {
     sync(vehicle: Vehicle): void {
+      const dtSec = clock.getDelta()
+
       // ── Chassis ────────────────────────────────────────────────────────────
       const ct = vehicle.chassis.translation()
       const cr = vehicle.chassis.rotation()
@@ -183,11 +230,69 @@ export function createScene(course: Course): Scene3D {
         wm.rotation.z = wr
       }
 
-      // Update wheel tint from current shape
+      // ── Shape morph detection ──────────────────────────────────────────────
       const shape = vehicle.currentShape()
-      const color = new THREE.Color(SHAPES[shape].colorHex)
-      for (const wm of vehicleMeshes.wheels) {
-        ;(wm.material as THREE.MeshLambertMaterial).color.set(color)
+
+      if (shape !== lastShape) {
+        // Swap geometry on each wheel mesh
+        for (const wm of vehicleMeshes.wheels) {
+          const oldGeo = wm.geometry
+          wm.geometry = wheelGeometry(shape)
+          oldGeo.dispose()
+        }
+
+        // Start juice animation
+        juice = {
+          scaleElapsed: 0,
+          flashElapsed: 0,
+          targetColor: new THREE.Color(SHAPES[shape].colorHex),
+        }
+
+        lastShape = shape
+      }
+
+      // ── Juice animation ────────────────────────────────────────────────────
+      if (juice !== null) {
+        juice.scaleElapsed += dtSec
+        juice.flashElapsed += dtSec
+
+        // Scale pop: ramp up to peak at t=duration/2, back down to 1 by t=duration.
+        // Use a symmetric triangle wave clamped to [1, JUICE_SCALE_PEAK].
+        let scale: number
+        const scaleProg = Math.min(juice.scaleElapsed / JUICE_SCALE_DURATION, 1)
+        if (scaleProg < 0.5) {
+          // Rising: 0 → JUICE_SCALE_PEAK
+          scale = 1 + (JUICE_SCALE_PEAK - 1) * (scaleProg / 0.5)
+        } else {
+          // Falling: JUICE_SCALE_PEAK → 1
+          scale = 1 + (JUICE_SCALE_PEAK - 1) * ((1 - scaleProg) / 0.5)
+        }
+
+        // Color flash: lerp from white → targetColor over flash duration.
+        const flashProg = Math.min(juice.flashElapsed / JUICE_FLASH_DURATION, 1)
+        const flashColor = new THREE.Color(JUICE_FLASH_COLOR)
+        flashColor.lerp(juice.targetColor, flashProg)
+
+        for (const wm of vehicleMeshes.wheels) {
+          wm.scale.set(scale, scale, scale)
+          ;(wm.material as THREE.MeshLambertMaterial).color.set(flashColor)
+        }
+
+        // Mark animation done once both sub-animations have finished
+        if (scaleProg >= 1 && flashProg >= 1) {
+          // Snap to exact final values
+          for (const wm of vehicleMeshes.wheels) {
+            wm.scale.set(1, 1, 1)
+            ;(wm.material as THREE.MeshLambertMaterial).color.set(juice.targetColor)
+          }
+          juice = null
+        }
+      } else {
+        // No animation running: keep color synced to current shape (no cost).
+        const color = new THREE.Color(SHAPES[shape].colorHex)
+        for (const wm of vehicleMeshes.wheels) {
+          ;(wm.material as THREE.MeshLambertMaterial).color.set(color)
+        }
       }
 
       // ── Monigote stays fixed relative to chassis ───────────────────────────
@@ -227,15 +332,13 @@ function buildVehicleMeshes(): VehicleMeshes {
   group.add(chassis)
 
   // ── Wheels ───────────────────────────────────────────────────────────────
-  // Initially circle wheels; tint updated in sync() per current shape.
-  const wheelGeo = new THREE.CylinderGeometry(WHEEL_RADIUS, WHEEL_RADIUS, 1.0, 12)
-  // Rotate so the cylinder axis aligns with z (side-view disc)
-  wheelGeo.rotateX(Math.PI / 2)
-
+  // Start as circle wheels; geometry and color are swapped in sync() when
+  // the vehicle's currentShape() changes.
   const wheels: THREE.Mesh[] = []
   for (let i = 0; i < 2; i++) {
+    const geo = wheelGeometry('circle')
     const mat = new THREE.MeshLambertMaterial({ color: SHAPES.circle.colorHex })
-    const mesh = new THREE.Mesh(wheelGeo, mat)
+    const mesh = new THREE.Mesh(geo, mat)
     mesh.position.set(0, 0, WHEEL_Z)
     group.add(mesh)
     wheels.push(mesh)
