@@ -143,6 +143,15 @@ export function createScene(course: Course): Scene3D {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO))
   renderer.setSize(window.innerWidth, window.innerHeight)
   renderer.setClearColor(SKY_COLOR)
+  // Pin the canvas to the full viewport so other body children (draw-box, HUD)
+  // can never push it out of the layout flow.
+  Object.assign(renderer.domElement.style, {
+    position: 'fixed',
+    inset: '0',
+    width: '100%',
+    height: '100%',
+    zIndex: '0',
+  } satisfies Partial<CSSStyleDeclaration>)
   document.body.appendChild(renderer.domElement)
 
   // ── Scene ───────────────────────────────────────────────────────────────────
