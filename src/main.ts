@@ -1,47 +1,52 @@
 /**
- * Gurpil — arcade 2.5D time-trial PWA
- * Entry point: initialises Rapier2d physics and a Three.js canvas with a clear
- * color to prove both libraries load. No game logic yet.
+ * Gurpil — entry point.
+ *
+ * Boot sequence:
+ *   1. Init Rapier WASM.
+ *   2. Build the MVP course (pure, deterministic).
+ *   3. Create the physics world (static terrain + egg colliders).
+ *   4. Spawn the vehicle slightly above the start.
+ *   5. Create the Three.js scene.
+ *   6. Run a minimal rAF loop: no physics stepping yet (Task 12 owns the real
+ *      game loop), but calls scene.sync(vehicle) + scene.render() so the car
+ *      is visible on the terrain from the first frame.
  */
 
-import * as THREE from "three";
-import RAPIER from "@dimforge/rapier2d-compat";
+import RAPIER from '@dimforge/rapier2d-compat'
+import { buildCourse } from './core/course'
+import { createWorld } from './physics/world'
+import { createVehicle } from './physics/vehicle'
+import { createScene } from './render/scene'
 
 async function boot(): Promise<void> {
-  // Initialise Rapier2d (WASM embedded in the compat bundle — no separate asset)
-  await RAPIER.init();
+  await RAPIER.init()
 
-  const canvas = document.getElementById("canvas") as HTMLCanvasElement | null;
-  if (!canvas) {
-    console.error("[gurpil] #canvas element not found");
-    return;
+  const course = buildCourse()
+  const world = await createWorld(course)
+
+  // Spawn vehicle slightly above the start so it settles under gravity
+  const vehicle = createVehicle(world, { x: course.startX + 2, y: 2 })
+
+  // Let it settle for a few physics ticks before showing
+  for (let i = 0; i < 10; i++) {
+    vehicle.applyDrive()
+    world.step()
   }
 
-  // Minimal Three.js renderer — clear color only, no scene objects yet
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setClearColor(0x1a1a2e);
+  const scene = createScene(course)
 
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(
-    60,
-    window.innerWidth / window.innerHeight,
-    0.1,
-    1000,
-  );
-  camera.position.set(0, 0, 10);
+  // Minimal rAF loop — no physics stepping; Task 12 will replace this.
+  function frame(): void {
+    scene.sync(vehicle)
+    scene.render()
+    requestAnimationFrame(frame)
+  }
 
-  window.addEventListener("resize", () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  });
+  requestAnimationFrame(frame)
 
-  // Render a single frame — no game loop yet
-  renderer.render(scene, camera);
-
-  console.log("[gurpil] boot OK — Three.js + Rapier2d loaded");
+  console.log('[gurpil] boot OK — Three.js + Rapier2d loaded')
 }
 
-boot();
+boot().catch((err: unknown) => {
+  console.error('[gurpil] boot failed', err)
+})
