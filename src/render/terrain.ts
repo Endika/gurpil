@@ -26,8 +26,29 @@ const TERRAIN_WALL_DEPTH = 8
 /** Radius of egg obstacle spheres (visual, slightly larger than physics). */
 const EGG_VISUAL_RADIUS = 0.6
 
-/** z centre of the terrain strip. Front face at z=TERRAIN_DEPTH/2, back at -TERRAIN_DEPTH/2. */
-const TERRAIN_Z_CENTER = 0
+/**
+ * z of the egg obstacle meshes. Placed on the physics plane (z=0), in front of
+ * the terrain strip (whose front face is at TERRAIN_FRONT_Z after the mesh is
+ * pushed back), so the eggs read as sitting on the track, not buried in it.
+ */
+const EGG_Z = 0
+
+/**
+ * z of the terrain strip's FRONT face (the face nearest the camera), in the
+ * mesh's local space.
+ *
+ * Layering fix: the vehicle sits on the z=0 physics plane with its wheels at
+ * WHEEL_Z=0.4 (see scene.ts). The terrain is extruded almost entirely AWAY from
+ * the camera (into -z): its front face is kept just barely in front of the mesh
+ * origin so the strip still reads as a solid 3D block, but the whole mesh is then
+ * pushed behind the vehicle via `terrainMesh.position.z` in scene.ts. This keeps
+ * the front WALL (which spans ground level, where the wheels are) from occluding
+ * the wheels — the earlier bug was the wall's world-z landing in front of them.
+ */
+const TERRAIN_FRONT_Z = 0.05
+
+/** z of the terrain strip's BACK face (extruded away from the camera). */
+const TERRAIN_BACK_Z = TERRAIN_FRONT_Z - TERRAIN_DEPTH
 
 // ─── Terrain color zones ──────────────────────────────────────────────────────
 
@@ -72,8 +93,8 @@ export function buildTerrainStrip(ground: Point[]): {
     }
   }
 
-  const zFront = TERRAIN_Z_CENTER + TERRAIN_DEPTH / 2
-  const zBack = TERRAIN_Z_CENTER - TERRAIN_DEPTH / 2
+  const zFront = TERRAIN_FRONT_Z
+  const zBack = TERRAIN_BACK_Z
   const wallBottom = -TERRAIN_WALL_DEPTH
 
   // Per segment (n-1 quads), we emit 4 vertices (front-top, back-top, front-bottom, back-bottom)
@@ -200,7 +221,7 @@ export function buildObstacleMeshes(obstacles: Obstacle[]): THREE.Group {
   for (const obs of obstacles) {
     if (obs.kind !== 'egg') continue
     const mesh = new THREE.Mesh(eggGeo, eggMat)
-    mesh.position.set(obs.x, obs.y + EGG_VISUAL_RADIUS, TERRAIN_Z_CENTER)
+    mesh.position.set(obs.x, obs.y + EGG_VISUAL_RADIUS, EGG_Z)
     group.add(mesh)
   }
 

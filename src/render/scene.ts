@@ -27,7 +27,7 @@ import type { Vehicle } from '../physics/vehicle'
 import { SHAPES } from '../core/shapes'
 import type { ShapeId } from '../core/shapes'
 import { buildTerrainMesh, buildObstacleMeshes } from './terrain'
-import { wheelGeometry } from './wheelMesh'
+import { wheelGeometry, WHEEL_VISUAL_RADIUS } from './wheelMesh'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -55,6 +55,18 @@ const WHEEL_Z = 0.4
 /** z position of the monigote body+head meshes. */
 const MONIGOTE_Z = 0.1
 
+/**
+ * z offset applied to the whole terrain mesh so it sits BEHIND the entire
+ * vehicle from the camera's view.
+ *
+ * The terrain strip is extruded away from the camera (front face at
+ * TERRAIN_FRONT_Z ≈ +0.05 in terrain.ts) and then shifted back by this amount,
+ * putting its frontmost face at ≈ -0.45 world-z — safely behind the chassis
+ * (z=0), the monigote (0.1) and especially the wheels (WHEEL_Z=0.4), which sit
+ * at ground level and used to be hidden behind the terrain's front wall.
+ */
+const TERRAIN_Z = -0.5
+
 /** Chassis box half-extents in metres (matches physics: CHASSIS_HALF_W=1, CHASSIS_HALF_H=0.3). */
 const CHASSIS_HALF_W = 1.0
 const CHASSIS_HALF_H = 0.3
@@ -68,6 +80,26 @@ const HEAD_RADIUS = 0.2
 
 /** Pixel ratio cap to limit GPU load on high-DPI mobile. */
 const MAX_PIXEL_RATIO = 2
+
+// ─── Wheel spin marker (spoke) ─────────────────────────────────────────────────
+
+/**
+ * A uniform-colored disc gives no visual cue that it is spinning. To make the
+ * circle wheel's rotation perceptible we parent a thin contrasting "spoke" bar to
+ * each wheel mesh: it inherits the wheel's rotation.z, so it visibly sweeps
+ * around as the car rolls. The spoke is shown ONLY for the circle — the square,
+ * triangle and line already show their orientation through their silhouette.
+ */
+const SPOKE_COLOR = 0x222831 // near-black, high contrast on the coral disc
+
+/** Spoke length as a fraction of the wheel diameter (spans the disc). */
+const SPOKE_LENGTH = WHEEL_VISUAL_RADIUS * 2 * 0.9
+
+/** Spoke thickness (metres) — thin bar. */
+const SPOKE_THICKNESS = WHEEL_VISUAL_RADIUS * 0.28
+
+/** Spoke z: just in front of the disc face so it is never z-fought or hidden. */
+const SPOKE_Z = 0.55
 
 // ─── Juice animation constants ────────────────────────────────────────────────
 
@@ -112,6 +144,8 @@ interface VehicleMeshes {
   group: THREE.Group
   chassis: THREE.Mesh
   wheels: THREE.Mesh[]
+  /** Per-wheel spin-marker spokes (children of the wheels); circle-only. */
+  spokes: THREE.Mesh[]
   monigoteBody: THREE.Mesh
   monigoteHead: THREE.Mesh
 }
@@ -178,7 +212,7 @@ export function createScene(course: Course): Scene3D {
 
   // ── Terrain ──────────────────────────────────────────────────────────────────
   const terrainMesh = buildTerrainMesh(course)
-  terrainMesh.position.z = -0.5
+  terrainMesh.position.z = TERRAIN_Z
   scene.add(terrainMesh)
 
   const obstacleMeshes = buildObstacleMeshes(course.obstacles)
@@ -248,6 +282,12 @@ export function createScene(course: Course): Scene3D {
           const oldGeo = wm.geometry
           wm.geometry = wheelGeometry(shape)
           oldGeo.dispose()
+        }
+
+        // Spin marker only makes sense for the circle (a featureless disc);
+        // the other shapes already reveal their spin through their silhouette.
+        for (const spoke of vehicleMeshes.spokes) {
+          spoke.visible = shape === 'circle'
         }
 
         // Start juice animation
@@ -344,6 +384,10 @@ function buildVehicleMeshes(): VehicleMeshes {
   // Start as circle wheels; geometry and color are swapped in sync() when
   // the vehicle's currentShape() changes.
   const wheels: THREE.Mesh[] = []
+  const spokes: THREE.Mesh[] = []
+  // One shared geometry + material for both spokes (cheap; never mutated).
+  const spokeGeo = new THREE.BoxGeometry(SPOKE_LENGTH, SPOKE_THICKNESS, 0.05)
+  const spokeMat = new THREE.MeshLambertMaterial({ color: SPOKE_COLOR })
   for (let i = 0; i < 2; i++) {
     const geo = wheelGeometry('circle')
     const mat = new THREE.MeshLambertMaterial({ color: SHAPES.circle.colorHex })
@@ -351,6 +395,13 @@ function buildVehicleMeshes(): VehicleMeshes {
     mesh.position.set(0, 0, WHEEL_Z)
     group.add(mesh)
     wheels.push(mesh)
+
+    // Spin-marker spoke: child of the wheel so it inherits its rotation.z and
+    // sweeps visibly as the disc rolls. Shown only for the circle (see sync()).
+    const spoke = new THREE.Mesh(spokeGeo, spokeMat)
+    spoke.position.set(0, 0, SPOKE_Z - WHEEL_Z) // local: sits just in front of the disc
+    mesh.add(spoke)
+    spokes.push(spoke)
   }
 
   // ── Monigote body ─────────────────────────────────────────────────────────
@@ -369,5 +420,5 @@ function buildVehicleMeshes(): VehicleMeshes {
   monigoteHead.position.set(0, CHASSIS_HALF_H + BODY_HALF_H * 2 + HEAD_RADIUS, MONIGOTE_Z)
   group.add(monigoteHead)
 
-  return { group, chassis, wheels, monigoteBody, monigoteHead }
+  return { group, chassis, wheels, spokes, monigoteBody, monigoteHead }
 }
