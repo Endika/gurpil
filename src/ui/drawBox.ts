@@ -29,6 +29,9 @@ const STROKE_WIDTH_PX = 3
 /** Feedback flash duration in milliseconds. */
 const FEEDBACK_DURATION_MS = 600
 
+/** Recognized-shape label font size as a fraction of the canvas height. */
+const FEEDBACK_FONT_SIZE_RATIO = 0.22
+
 /** Default canvas size (square) expressed as a CSS value string. */
 const DEFAULT_SIZE_CSS = 'clamp(120px, 30vw, 220px)'
 
@@ -83,9 +86,12 @@ export function createDrawBox(onShape: (id: ShapeId) => void): DrawBox {
   container.appendChild(canvas)
 
   // ── Backing store sizing (DPR-aware) ─────────────────────────────────────────
-  const dpr = window.devicePixelRatio ?? 1
+  // Read the device pixel ratio at call time (not once at construction) so the
+  // canvas stays correct if the window moves to a monitor with a different DPR.
+  const currentDpr = (): number => window.devicePixelRatio ?? 1
 
   function syncCanvasSize(): void {
+    const dpr = currentDpr()
     const rect = canvas.getBoundingClientRect()
     const w = Math.round(rect.width * dpr)
     const h = Math.round(rect.height * dpr)
@@ -111,6 +117,7 @@ export function createDrawBox(onShape: (id: ShapeId) => void): DrawBox {
 
   /** Convert a clientX/Y to canvas-local pixel coords (DPR-scaled). */
   function clientToCanvas(clientX: number, clientY: number): { cx: number; cy: number } {
+    const dpr = currentDpr()
     const rect = canvas.getBoundingClientRect()
     return {
       cx: (clientX - rect.left) * dpr,
@@ -137,7 +144,7 @@ export function createDrawBox(onShape: (id: ShapeId) => void): DrawBox {
     clearCanvas()
     ctx.save()
     ctx.strokeStyle = LIVE_STROKE_COLOR
-    ctx.lineWidth = STROKE_WIDTH_PX * dpr
+    ctx.lineWidth = STROKE_WIDTH_PX * currentDpr()
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
     ctx.beginPath()
@@ -171,7 +178,7 @@ export function createDrawBox(onShape: (id: ShapeId) => void): DrawBox {
     // Also draw the shape label briefly on the canvas.
     const label = id.toUpperCase()
     ctx.save()
-    ctx.font = `bold ${Math.round(canvas.height * 0.22)}px sans-serif`
+    ctx.font = `bold ${Math.round(canvas.height * FEEDBACK_FONT_SIZE_RATIO)}px sans-serif`
     ctx.fillStyle = cssColor
     ctx.globalAlpha = 0.9
     ctx.textAlign = 'center'
