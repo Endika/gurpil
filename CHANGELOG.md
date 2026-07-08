@@ -1,0 +1,68 @@
+# Changelog
+
+## [0.2.0](https://github.com/Endika/gurpil/compare/v0.1.0...v0.2.0) (2026-07-08)
+
+
+### Features
+
+* **core:** deterministic MVP course model ([bc26608](https://github.com/Endika/gurpil/commit/bc266087bea5a81811a1ca08c6410e48fab4111b))
+* **core:** run state machine and timer ([4b4c15c](https://github.com/Endika/gurpil/commit/4b4c15c16a7d6fdfd037bda4f203b836446dff8c))
+* **core:** seeded difficulty-based course generator ([7dddbb5](https://github.com/Endika/gurpil/commit/7dddbb5990f41c9d85f6bf89a7a05b18a0be41ed))
+* **core:** shape catalog as single source of truth ([3fe38b7](https://github.com/Endika/gurpil/commit/3fe38b70a005f1cb0fefea9b24d1256e5edcc8de))
+* **core:** stroke shape classification ([85cd617](https://github.com/Endika/gurpil/commit/85cd617cb83023c4614b383ea514f8e34d6891af))
+* **core:** time medals and best-time persistence ([48e937f](https://github.com/Endika/gurpil/commit/48e937f5fd4fa304a98a34fce4f54bc280091e1a))
+* **game:** fixed-step loop, race state and input wiring ([6a2f38b](https://github.com/Endika/gurpil/commit/6a2f38b290d6e25e89d8faca205a063a200bdc61))
+* **game:** wire procedural tracks, medals, and reload-based re-init ([cb7be48](https://github.com/Endika/gurpil/commit/cb7be485b0f3ea6e1cacc52adf6bea3585029fc4))
+* **physics:** live wheel shape-swap with per-shape behavior ([84c4f8c](https://github.com/Endika/gurpil/commit/84c4f8ce8fa48ce3d2c09732647a098ab9fd8130))
+* **physics:** motorized two-wheel vehicle ([0c5bec3](https://github.com/Endika/gurpil/commit/0c5bec387760643443f9708124591f7d1ad376c4))
+* **physics:** rapier world and static terrain colliders ([5f16e3f](https://github.com/Endika/gurpil/commit/5f16e3fb0a303ce706220b345c8db4ce30bae30e))
+* **render:** charming low-poly kart and driver art ([d8e175d](https://github.com/Endika/gurpil/commit/d8e175d77a46359b5e9240b330df5a5a235547d0))
+* **render:** chunkier, cuter blob rider to match reference ([753aa52](https://github.com/Endika/gurpil/commit/753aa52ed379a88ff4eed3faa7bb3fcdaf9a40a4))
+* **render:** cute scooter and blob rider ([b59a50d](https://github.com/Endika/gurpil/commit/b59a50d7bcbfb27a5b4da2b837cf5779c85b5403))
+* **render:** subtle sparks at max speed ([4d0d53b](https://github.com/Endika/gurpil/commit/4d0d53b08f055ed4de0beecb26e020e7d8f82455))
+* **render:** three.js scene, terrain mesh and side camera ([fdd0a72](https://github.com/Endika/gurpil/commit/fdd0a72488348fd5118f77f60a04933cbd7b7ffd))
+* **render:** wheel shape morph with swap juice ([b574231](https://github.com/Endika/gurpil/commit/b574231db28b076c22207d3d4cc5de71661e5850))
+* **ui:** difficulty select screen and medal finish overlay ([2049dc9](https://github.com/Endika/gurpil/commit/2049dc94b8ff61d9ffb6455e257ff09b16145ed0))
+* **ui:** finger/mouse draw-box with shape classification ([2c2d93c](https://github.com/Endika/gurpil/commit/2c2d93c65de50fb83eef71df8b5db8266338fcf0))
+* **ui:** real HUD, start/finish overlays and i18n ([a1fd43e](https://github.com/Endika/gurpil/commit/a1fd43e71f08eaa5999c2844e9a419cb40c7f69c))
+* **ui:** speed gauge so the wheel shape's effect on speed is visible ([d93d841](https://github.com/Endika/gurpil/commit/d93d84143d5dae99abf73966a596cf14199576fd))
+
+
+### Bug Fixes
+
+* **physics:** apply PHYSICS_TIMESTEP to world as source of truth ([d38bcaa](https://github.com/Endika/gurpil/commit/d38bcaa2da5b69d89795c8d190b9d421b342cf4a))
+* **physics:** keep vehicle bodies awake so the motor can't stall ([117f86d](https://github.com/Endika/gurpil/commit/117f86da4d65da8a25c9f08e2f41294a3eb18272))
+* **physics:** make the uphill require a grippy wheel (circle slips, triangle climbs) ([3417945](https://github.com/Endika/gurpil/commit/3417945f1770eb9d87a7944b79d556148dc4bd10))
+* **physics:** penalize circle on slopes so wheel shape matters uphill ([29af201](https://github.com/Endika/gurpil/commit/29af201d80d0c6d1018fa809239a8dbf25d1ad6b))
+* **physics:** tame rocky terrain and add self-right so the car can't get stuck ([42cf7e5](https://github.com/Endika/gurpil/commit/42cf7e52c09b19b6b9fda4c4c29ffa9d9955b45c))
+* **pwa:** drop duplicate manifest link and add installable icons ([a7c3cf8](https://github.com/Endika/gurpil/commit/a7c3cf8b64f9308de3b408497bc5314744861aa8))
+* **pwa:** lock to portrait and frame the camera to keep track visible in any orientation ([96e506c](https://github.com/Endika/gurpil/commit/96e506c434ea43a5fe09443a02f9962dbf787e98))
+* **render:** follow the car vertically so it stays framed on hills ([a9c2aba](https://github.com/Endika/gurpil/commit/a9c2aba489582babe5dfac7f171e5332b0086970))
+* **render:** remove orphan scaffold canvas hiding the scene; pin renderer to viewport ([c0923ad](https://github.com/Endika/gurpil/commit/c0923ad13b35d2708aa63ab207c3ecb07a74fd0b))
+* **render:** render the whole vehicle in front of the terrain + wheel spin marker ([9aa1cd1](https://github.com/Endika/gurpil/commit/9aa1cd1ec777ec51c8ec0afc0df3164932f83ff5))
+* **render:** tilt the rider with the chassis ([fcd1d8b](https://github.com/Endika/gurpil/commit/fcd1d8b55d157ea3da1541cb5dccf85cfcafd7ad))
+* **scaffold:** include tests/ in tsconfig for typechecking ([4ecf9af](https://github.com/Endika/gurpil/commit/4ecf9af5f4b9e0be0d80ab2c6d36253408d1567b))
+* **ui:** center the draw-box and stop the start screen blocking it ([be883f9](https://github.com/Endika/gurpil/commit/be883f903db01468fbc6fd7d90cea376a22c7465))
+* **ui:** fit the draw-box shape label to the box width for legibility ([ebd738d](https://github.com/Endika/gurpil/commit/ebd738d21194edcd3e5470fc8e9313f434a63cd3))
+* **ui:** read devicePixelRatio at draw time; name feedback font ratio ([66c357f](https://github.com/Endika/gurpil/commit/66c357f3fb012d9b1a2601575dfaa9152c32fb21))
+* **ui:** stop the start title overlapping the timer ([dd9c884](https://github.com/Endika/gurpil/commit/dd9c88459997da2b9300cb41eb2072eff621575e))
+
+
+### Refactor
+
+* **physics:** stable-hybrid wheel model — ball collider always, shape drives tuned params ([d7ede9d](https://github.com/Endika/gurpil/commit/d7ede9dc667aa6a6ba5c6ccc85605814ec448348))
+* **render:** drop dead chassis writes in sync, fix terrain index comment ([ffd72dc](https://github.com/Endika/gurpil/commit/ffd72dce1a102d5e9846daed1e0ed4ea4ebdd88d))
+
+
+### Documentation
+
+* add README and license ([ef18bc2](https://github.com/Endika/gurpil/commit/ef18bc2864df6dbfbbfe373fe1173764f2fc3450))
+* **core:** clarify LINE_RESIDUAL_THRESHOLD normalization comment ([17dad46](https://github.com/Endika/gurpil/commit/17dad46882767887400b5f9cce9964aea4ae50c8))
+* describe the stable-hybrid wheel model accurately ([d5237c3](https://github.com/Endika/gurpil/commit/d5237c39d372ccb1608d421c030871403c830cc6))
+
+
+### Chores
+
+* **ci:** add GitHub Pages deploy and release-please workflows ([ff14f40](https://github.com/Endika/gurpil/commit/ff14f409f7c54c603001e0a2e35741092b958779))
+* initial commit ([c566688](https://github.com/Endika/gurpil/commit/c566688eea4bfb3256ebf398d5a48058195ecdc5))
+* **scaffold:** project scaffold + toolchain ([eab7ca6](https://github.com/Endika/gurpil/commit/eab7ca623272edca7ebeab7934e5663777055f02))
