@@ -1,13 +1,14 @@
 /**
  * Scene3D — Three.js visual layer for Gurpil.
  *
- * Camera choice: OrthographicCamera.
- * Rationale: the game is a pure side-scroller (physics on the x-y plane).
- * An orthographic camera gives a clean 2D-game-like read without perspective
- * distortion; depth (z) is used only for layering meshes, not for perspective
- * foreshortening. The frustum half-height is fixed in "game metres" so the
- * car and terrain always appear at the same pixel size regardless of window
- * width, and the camera follows chassis x via smooth lerp.
+ * Camera choice: PerspectiveCamera at a gentle 3/4 angle.
+ * Rationale: the game is a side-scroller (physics on the x-y plane), but a soft
+ * perspective — mostly side-on with a touch of yaw/pitch — makes the world read
+ * as genuinely 3D (depth, shadows, parallax) rather than flat. The camera
+ * follows the chassis in BOTH x and y via smooth lerp, and its distance is
+ * derived per-aspect (requiredCameraDistance) so a minimum track width/height
+ * around the car is ALWAYS visible — in portrait the camera is pushed further
+ * back so the horizontal "track ahead" budget still holds.
  *
  * Coordinate mapping:
  *   physics x  → scene x  (1:1)
@@ -31,28 +32,54 @@ import { wheelGeometry, WHEEL_VISUAL_RADIUS } from './wheelMesh'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-/** Minimum vertical half-extent the camera always shows (game metres). */
-const CAM_HALF_HEIGHT = 12
+/**
+ * Vertical field of view of the perspective camera (degrees). Kept modest so
+ * the 3/4 view reads as a gentle perspective, not a wide-angle fish-eye that
+ * would distort the terrain profile and wheels.
+ */
+const CAM_FOV_Y = 34
 
 /**
- * Minimum horizontal half-extent the camera always shows (game metres) — the
- * "track ahead" budget. In portrait (narrow) the frustum is grown vertically so
- * this much width is still visible; in landscape the height minimum dominates.
- * This keeps the side-scroller playable in any orientation.
+ * Minimum HALF-width of track the camera always shows around the car (game
+ * metres) — the "track ahead" budget. Full visible width is 2× this. In
+ * portrait (narrow) the required camera distance is grown so this much width
+ * is still visible; in landscape the height minimum dominates.
  */
-const CAM_HALF_WIDTH = 15
+const MIN_VISIBLE_HALF_WIDTH = 15
+
+/** Minimum HALF-height the camera always shows around the car (game metres). */
+const MIN_VISIBLE_HALF_HEIGHT = 12
 
 /**
- * Compute the orthographic half-extents for a viewport aspect (w/h) so that
- * BOTH minimums (CAM_HALF_WIDTH, CAM_HALF_HEIGHT) are always satisfied.
+ * View-offset direction from the look target to the camera — a GENTLE 3/4:
+ * dominated by +z (side-on, so the terrain profile and wheels stay readable),
+ * with a touch of +x (slight yaw → shows the front-right) and +y (slight pitch
+ * → shows a bit of the top). Normalised so it can be scaled by the required
+ * distance without changing the angle (the 3/4 look is identical at any aspect;
+ * portrait just moves the camera further back along this same direction).
+ * Yaw ≈ atan(0.12) ≈ 6.8°, pitch ≈ atan(0.20) ≈ 11.3°.
  */
-function frustumHalfExtents(aspect: number): { halfW: number; halfH: number } {
-  const halfH = Math.max(CAM_HALF_HEIGHT, CAM_HALF_WIDTH / aspect)
-  return { halfW: halfH * aspect, halfH }
+const CAM_VIEW_DIR = new THREE.Vector3(0.12, 0.2, 1).normalize()
+
+/** Camera near/far planes — far must clear the most distant parallax hill. */
+const CAM_NEAR = 0.5
+const CAM_FAR = 400
+
+/**
+ * Required camera-to-target distance for a viewport aspect (w/h) so that BOTH
+ * minimums (MIN_VISIBLE_HALF_WIDTH, MIN_VISIBLE_HALF_HEIGHT) are guaranteed at
+ * the target's depth. The visible half-height at distance d is d·tan(fovY/2)
+ * and the half-width is that × aspect, so we take the tighter (larger-distance)
+ * of the vertical and horizontal fits. In portrait aspect < 1, so the
+ * horizontal fit dominates and the camera is pushed further back — keeping the
+ * track-ahead budget met in any orientation.
+ */
+function requiredCameraDistance(aspect: number): number {
+  const t = Math.tan(THREE.MathUtils.degToRad(CAM_FOV_Y) / 2)
+  const distForHeight = MIN_VISIBLE_HALF_HEIGHT / t
+  const distForWidth = MIN_VISIBLE_HALF_WIDTH / (t * aspect)
+  return Math.max(distForHeight, distForWidth)
 }
-
-/** z distance of the camera from the x-y plane (orthographic depth budget). */
-const CAM_Z = 50
 
 /**
  * How far the camera leads/lags the vehicle in x (lerp factor per frame).
@@ -356,10 +383,95 @@ const JUICE_FLASH_COLOR = 0xffffff
 
 // ─── Sky / lighting colors ────────────────────────────────────────────────────
 
-const SKY_COLOR = 0x87ceeb // cornflower blue
+const SKY_COLOR = 0x87ceeb // cornflower blue — renderer clear-color fallback
 const SUN_COLOR = 0xfff7e0 // warm sunlight
+const SUN_INTENSITY = 1.3
+const HEMI_INTENSITY = 0.85
 const AMBIENT_SKY = 0x87cefa // sky ambient
 const AMBIENT_GROUND = 0x8b6914 // ground ambient
+
+/** Vertical gradient sky: deeper blue up top fading to a pale horizon band. */
+const SKY_TOP_COLOR = '#5ba8e6'
+const SKY_HORIZON_COLOR = '#d6ecf7'
+/** Resolution of the 1×N gradient texture painted onto scene.background. */
+const SKY_GRADIENT_HEIGHT = 256
+
+// ─── Atmosphere (fog) ───────────────────────────────────────────────────────────
+// Linear fog tinted to the sky's horizon so distance fades seamlessly into the
+// sky. FOG_NEAR is set beyond the largest camera-to-vehicle distance (portrait
+// pushes the camera to ≈87 units back) so the car and nearby track are NEVER
+// fogged; only the far parallax hills fade.
+
+const FOG_COLOR = 0xd6ecf7 // matches SKY_HORIZON_COLOR
+const FOG_NEAR = 105
+const FOG_FAR = 320
+
+// ─── Directional-light shadows ──────────────────────────────────────────────────
+// The sun casts soft shadows. Both the light and its target follow the vehicle
+// each frame so the (modest) shadow map always covers the car and keeps its
+// shadow crisp. Offsets are relative to the vehicle position.
+
+const SUN_OFFSET_X = 14
+const SUN_OFFSET_Y = 24
+const SUN_OFFSET_Z = 12
+/** Shadow map resolution — modest (1024²) to stay cheap on mobile. */
+const SHADOW_MAP_SIZE = 1024
+/** Half-size of the (orthographic) shadow camera around the vehicle (metres). */
+const SHADOW_CAM_HALF = 18
+const SHADOW_NEAR = 1
+const SHADOW_FAR = 90
+/** Depth/normal bias to suppress shadow acne on the near-flat terrain top. */
+const SHADOW_BIAS = -0.0004
+const SHADOW_NORMAL_BIAS = 0.02
+
+// ─── Vehicle material finish ────────────────────────────────────────────────────
+
+/** Scooter deck/stem/handlebar finish — a light satin sheen. */
+const SCOOTER_ROUGHNESS = 0.55
+const SCOOTER_METALNESS = 0.1
+/** Wheel finish — a touch glossier so the shapes catch the sun. */
+const WHEEL_ROUGHNESS = 0.45
+const WHEEL_METALNESS = 0.05
+
+// ─── Parallax background hills ────────────────────────────────────────────────────
+// 2–3 layers of soft, hazy hill silhouettes far in -z. Lighter/bluer as they
+// recede (atmospheric perspective) so they fade into the fog. Each layer follows
+// the camera by a parallax factor (< 1): far layers track the camera more
+// closely (appear more distant / move less relative to it), near layers less.
+// Flat unlit silhouettes (fog-affected) — cheap, built once, only repositioned.
+
+/** Half-width of each hill silhouette (metres) — wide enough to always cover
+ *  the viewport at its depth across every aspect, given the parallax drift. */
+const HILL_HALF_WIDTH = 240
+/** Number of segments along a hill's wavy top edge. */
+const HILL_SEGMENTS = 48
+/** How far a hill extends below its baseline (metres) so its bottom is always
+ *  off-screen below the terrain — no gap ever shows under a layer. */
+const HILL_SKIRT_DEPTH = 80
+
+interface HillLayerSpec {
+  /** z depth (world) — more negative = further back. */
+  z: number
+  /** Flat silhouette color (lighter/bluer with distance). */
+  color: number
+  /** Peak bump height of the wavy top edge (metres). */
+  amplitude: number
+  /** Baseline y offset added on top of the parallax-followed camera y. */
+  baseY: number
+  /** Parallax follow factor in [0,1): far → closer to 1 (moves less on screen). */
+  parallax: number
+  /** Spatial frequency of the primary bump wave (radians per metre). */
+  frequency: number
+  /** Phase offset (radians) so layers don't share identical crests. */
+  phase: number
+}
+
+/** Three layers, near → far. Colors trend toward the horizon/fog color. */
+const HILL_LAYERS: HillLayerSpec[] = [
+  { z: -50, color: 0x7fb4d8, amplitude: 6, baseY: -4, parallax: 0.72, frequency: 0.05, phase: 0 },
+  { z: -80, color: 0xa6cce0, amplitude: 8, baseY: 1, parallax: 0.82, frequency: 0.035, phase: 1.7 },
+  { z: -110, color: 0xc4dcec, amplitude: 11, baseY: 6, parallax: 0.91, frequency: 0.025, phase: 3.1 },
+]
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -410,6 +522,10 @@ export function createScene(course: Course): Scene3D {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO))
   renderer.setSize(window.innerWidth, window.innerHeight)
   renderer.setClearColor(SKY_COLOR)
+  // Soft shadows — the biggest 3D-pop lever. PCF-soft keeps edges gentle at a
+  // modest map size (mobile-friendly).
+  renderer.shadowMap.enabled = true
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap
   // Pin the canvas to the full viewport so other body children (draw-box, HUD)
   // can never push it out of the layout flow.
   Object.assign(renderer.domElement.style, {
@@ -423,28 +539,55 @@ export function createScene(course: Course): Scene3D {
 
   // ── Scene ───────────────────────────────────────────────────────────────────
   const scene = new THREE.Scene()
-  scene.background = new THREE.Color(SKY_COLOR)
+  // Vertical gradient sky (deep blue → pale horizon) instead of a flat color,
+  // plus horizon-tinted fog so distance reads with depth.
+  scene.background = buildSkyGradientTexture()
+  scene.fog = new THREE.Fog(FOG_COLOR, FOG_NEAR, FOG_FAR)
 
   // Hemisphere light (sky from above, ground bounce from below)
-  const hemi = new THREE.HemisphereLight(AMBIENT_SKY, AMBIENT_GROUND, 0.8)
+  const hemi = new THREE.HemisphereLight(AMBIENT_SKY, AMBIENT_GROUND, HEMI_INTENSITY)
   hemi.position.set(0, 1, 0)
   scene.add(hemi)
 
-  // Directional sun light
-  const sun = new THREE.DirectionalLight(SUN_COLOR, 1.2)
-  sun.position.set(10, 20, 15)
+  // Directional sun light — casts the soft shadows. Both the light and its
+  // target follow the vehicle each frame (see sync) so the shadow map stays
+  // centred on the car.
+  const sun = new THREE.DirectionalLight(SUN_COLOR, SUN_INTENSITY)
+  sun.position.set(SUN_OFFSET_X, SUN_OFFSET_Y, SUN_OFFSET_Z)
+  sun.castShadow = true
+  sun.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE)
+  sun.shadow.bias = SHADOW_BIAS
+  sun.shadow.normalBias = SHADOW_NORMAL_BIAS
+  const shadowCam = sun.shadow.camera
+  shadowCam.near = SHADOW_NEAR
+  shadowCam.far = SHADOW_FAR
+  shadowCam.left = -SHADOW_CAM_HALF
+  shadowCam.right = SHADOW_CAM_HALF
+  shadowCam.top = SHADOW_CAM_HALF
+  shadowCam.bottom = -SHADOW_CAM_HALF
+  shadowCam.updateProjectionMatrix()
   scene.add(sun)
+  scene.add(sun.target)
+
+  // ── Parallax background hills ──────────────────────────────────────────────────
+  const hills = buildHillLayers()
+  for (const hill of hills) scene.add(hill.mesh)
 
   // ── Camera ──────────────────────────────────────────────────────────────────
   const aspect = window.innerWidth / window.innerHeight
-  const { halfW, halfH } = frustumHalfExtents(aspect)
-  const camera = new THREE.OrthographicCamera(-halfW, halfW, halfH, -halfH, 0.1, 200)
-  camera.position.set(0, CAM_Y_OFFSET, CAM_Z)
-  camera.lookAt(0, CAM_Y_OFFSET, 0)
+  let camDist = requiredCameraDistance(aspect)
+  const camera = new THREE.PerspectiveCamera(CAM_FOV_Y, aspect, CAM_NEAR, CAM_FAR)
+  // Reusable scratch vectors — no per-frame allocation.
+  const camTarget = new THREE.Vector3(course.startX, CAM_Y_OFFSET, 0)
+  const camPos = new THREE.Vector3()
+  camPos.copy(CAM_VIEW_DIR).multiplyScalar(camDist).add(camTarget)
+  camera.position.copy(camPos)
+  camera.lookAt(camTarget)
 
   // ── Terrain ──────────────────────────────────────────────────────────────────
   const terrainMesh = buildTerrainMesh(course)
   terrainMesh.position.z = TERRAIN_Z
+  terrainMesh.receiveShadow = true
   scene.add(terrainMesh)
 
   const obstacleMeshes = buildObstacleMeshes(course.obstacles)
@@ -452,6 +595,14 @@ export function createScene(course: Course): Scene3D {
 
   // ── Vehicle meshes ───────────────────────────────────────────────────────────
   const vehicleMeshes = buildVehicleMeshes()
+  // Vehicle casts (and receives, so the rider shadows the deck) soft shadows.
+  vehicleMeshes.group.traverse((obj) => {
+    const mesh = obj as THREE.Mesh
+    if (mesh.isMesh) {
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+    }
+  })
   scene.add(vehicleMeshes.group)
 
   // ── Max-speed sparks ─────────────────────────────────────────────────────────
@@ -465,11 +616,11 @@ export function createScene(course: Course): Scene3D {
   window.addEventListener('resize', () => {
     const w = window.innerWidth
     const h = window.innerHeight
-    const { halfW: hw, halfH: hh } = frustumHalfExtents(w / h)
-    camera.left = -hw
-    camera.right = hw
-    camera.top = hh
-    camera.bottom = -hh
+    const aspectNow = w / h
+    // Recompute the follow distance so the min track-width/height guarantee
+    // holds at the new aspect (portrait pushes the camera further back).
+    camDist = requiredCameraDistance(aspectNow)
+    camera.aspect = aspectNow
     camera.updateProjectionMatrix()
     renderer.setSize(w, h)
   })
@@ -574,7 +725,7 @@ export function createScene(course: Course): Scene3D {
 
         for (const wm of vehicleMeshes.wheels) {
           wm.scale.set(scale, scale, scale)
-          ;(wm.material as THREE.MeshLambertMaterial).color.set(flashColor)
+          ;(wm.material as THREE.MeshStandardMaterial).color.set(flashColor)
         }
 
         // Mark animation done once both sub-animations have finished
@@ -582,7 +733,7 @@ export function createScene(course: Course): Scene3D {
           // Snap to exact final values
           for (const wm of vehicleMeshes.wheels) {
             wm.scale.set(1, 1, 1)
-            ;(wm.material as THREE.MeshLambertMaterial).color.set(juice.targetColor)
+            ;(wm.material as THREE.MeshStandardMaterial).color.set(juice.targetColor)
           }
           juice = null
         }
@@ -590,7 +741,7 @@ export function createScene(course: Course): Scene3D {
         // No animation running: keep color synced to current shape (no cost).
         const color = new THREE.Color(SHAPES[shape].colorHex)
         for (const wm of vehicleMeshes.wheels) {
-          ;(wm.material as THREE.MeshLambertMaterial).color.set(color)
+          ;(wm.material as THREE.MeshStandardMaterial).color.set(color)
         }
       }
 
@@ -601,11 +752,30 @@ export function createScene(course: Course): Scene3D {
       // ── Camera follow ─────────────────────────────────────────────────────
       // Follow the car in BOTH axes (smooth lerp) so it stays framed on steep
       // climbs — otherwise a tall uphill carries the car out of the top of view.
+      // The camera sits at target + CAM_VIEW_DIR·camDist (the 3/4 offset); the
+      // distance guarantees the min track width/height around the car for the
+      // current aspect (recomputed on resize).
       camX += (ct.x - camX) * CAM_LERP
       camY += (ct.y + CAM_Y_OFFSET - camY) * CAM_LERP
-      camera.position.x = camX
-      camera.position.y = camY
-      camera.lookAt(camX, camY, 0)
+      camTarget.set(camX, camY, 0)
+      camPos.copy(CAM_VIEW_DIR).multiplyScalar(camDist).add(camTarget)
+      camera.position.copy(camPos)
+      camera.lookAt(camTarget)
+
+      // ── Sun + shadow follow ────────────────────────────────────────────────
+      // Keep the light (and thus its shadow camera) centred on the vehicle so
+      // the modest shadow map stays crisp wherever the car is on the course.
+      sun.position.set(ct.x + SUN_OFFSET_X, ct.y + SUN_OFFSET_Y, SUN_OFFSET_Z)
+      sun.target.position.set(ct.x, ct.y, 0)
+      sun.target.updateMatrixWorld()
+
+      // ── Parallax hills ─────────────────────────────────────────────────────
+      // Each layer follows the camera by its parallax factor: far layers track
+      // more closely (appear more distant), near layers less (drift more).
+      for (const hill of hills) {
+        hill.mesh.position.x = camX * hill.parallax
+        hill.mesh.position.y = camY * hill.parallax + hill.baseY
+      }
     },
 
     render(): void {
@@ -644,7 +814,11 @@ function buildVehicleMeshes(): VehicleMeshes {
     DECK_RADIAL_SEGMENTS,
   )
   deckGeo.rotateZ(Math.PI / 2) // default capsule axis is y; lay it flat along x
-  const deckMat = new THREE.MeshLambertMaterial({ color: SCOOTER_DECK_COLOR })
+  const deckMat = new THREE.MeshStandardMaterial({
+    color: SCOOTER_DECK_COLOR,
+    roughness: SCOOTER_ROUGHNESS,
+    metalness: SCOOTER_METALNESS,
+  })
   const chassis = new THREE.Mesh(deckGeo, deckMat)
   chassis.position.set(0, DECK_OFFSET_Y, CHASSIS_Z)
   body.add(chassis)
@@ -654,8 +828,16 @@ function buildVehicleMeshes(): VehicleMeshes {
   // a vertical stem at the front topped by a horizontal handlebar bar with
   // grip knobs, forming a "T" in side view. Materials are shared across
   // meshes of the same color — cheap and never mutated at runtime.
-  const trimMat = new THREE.MeshLambertMaterial({ color: SCOOTER_TRIM_COLOR })
-  const accentMat = new THREE.MeshLambertMaterial({ color: SCOOTER_ACCENT_COLOR })
+  const trimMat = new THREE.MeshStandardMaterial({
+    color: SCOOTER_TRIM_COLOR,
+    roughness: SCOOTER_ROUGHNESS,
+    metalness: SCOOTER_METALNESS,
+  })
+  const accentMat = new THREE.MeshStandardMaterial({
+    color: SCOOTER_ACCENT_COLOR,
+    roughness: SCOOTER_ROUGHNESS,
+    metalness: SCOOTER_METALNESS,
+  })
 
   const stemCollar = new THREE.Mesh(
     new THREE.CylinderGeometry(STEM_COLLAR_RADIUS, STEM_COLLAR_RADIUS, STEM_COLLAR_HEIGHT, STEM_SEGMENTS),
@@ -692,10 +874,18 @@ function buildVehicleMeshes(): VehicleMeshes {
   const spokes: THREE.Mesh[] = []
   // One shared geometry + material for both spokes (cheap; never mutated).
   const spokeGeo = new THREE.BoxGeometry(SPOKE_LENGTH, SPOKE_THICKNESS, 0.05)
-  const spokeMat = new THREE.MeshLambertMaterial({ color: SPOKE_COLOR })
+  const spokeMat = new THREE.MeshStandardMaterial({
+    color: SPOKE_COLOR,
+    roughness: SCOOTER_ROUGHNESS,
+    metalness: SCOOTER_METALNESS,
+  })
   for (let i = 0; i < 2; i++) {
     const geo = wheelGeometry('circle')
-    const mat = new THREE.MeshLambertMaterial({ color: SHAPES.circle.colorHex })
+    const mat = new THREE.MeshStandardMaterial({
+      color: SHAPES.circle.colorHex,
+      roughness: WHEEL_ROUGHNESS,
+      metalness: WHEEL_METALNESS,
+    })
     const mesh = new THREE.Mesh(geo, mat)
     mesh.position.set(0, 0, WHEEL_Z)
     group.add(mesh)
@@ -805,6 +995,65 @@ function buildVehicleMeshes(): VehicleMeshes {
   }
 
   return { group, body, chassis, wheels, spokes, monigoteBody, monigoteHead }
+}
+
+/** A background hill layer plus the parallax params used to reposition it. */
+interface HillLayer {
+  mesh: THREE.Mesh
+  parallax: number
+  baseY: number
+}
+
+/**
+ * Build the vertical gradient sky as a 1×N canvas texture (deep blue up top
+ * fading to a pale horizon band), painted onto scene.background. Cheap: one
+ * small texture, generated once.
+ */
+function buildSkyGradientTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas')
+  canvas.width = 1
+  canvas.height = SKY_GRADIENT_HEIGHT
+  const ctx = canvas.getContext('2d')!
+  const grad = ctx.createLinearGradient(0, 0, 0, SKY_GRADIENT_HEIGHT)
+  grad.addColorStop(0, SKY_TOP_COLOR)
+  grad.addColorStop(1, SKY_HORIZON_COLOR)
+  ctx.fillStyle = grad
+  ctx.fillRect(0, 0, 1, SKY_GRADIENT_HEIGHT)
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  return texture
+}
+
+/**
+ * Build the parallax hill layers: soft, flat, unlit silhouettes far in -z.
+ * Each is a wide bumpy-topped shape; being flat + MeshBasicMaterial (fog-
+ * affected) they fade into the fog with distance. Built once; only their x/y
+ * are updated each frame (see sync) for the parallax scroll.
+ */
+function buildHillLayers(): HillLayer[] {
+  const layers: HillLayer[] = []
+  for (const spec of HILL_LAYERS) {
+    const shape = new THREE.Shape()
+    const topAt = (x: number): number =>
+      spec.amplitude *
+      (0.6 * Math.sin(spec.frequency * x + spec.phase) +
+        0.4 * Math.sin(spec.frequency * 2.3 * x + spec.phase * 1.7))
+    shape.moveTo(-HILL_HALF_WIDTH, -HILL_SKIRT_DEPTH)
+    shape.lineTo(-HILL_HALF_WIDTH, topAt(-HILL_HALF_WIDTH))
+    for (let s = 1; s <= HILL_SEGMENTS; s++) {
+      const x = -HILL_HALF_WIDTH + (2 * HILL_HALF_WIDTH * s) / HILL_SEGMENTS
+      shape.lineTo(x, topAt(x))
+    }
+    shape.lineTo(HILL_HALF_WIDTH, -HILL_SKIRT_DEPTH)
+    shape.closePath()
+
+    const geo = new THREE.ShapeGeometry(shape)
+    const mat = new THREE.MeshBasicMaterial({ color: spec.color, fog: true })
+    const mesh = new THREE.Mesh(geo, mat)
+    mesh.position.z = spec.z
+    layers.push({ mesh, parallax: spec.parallax, baseY: spec.baseY })
+  }
+  return layers
 }
 
 /**

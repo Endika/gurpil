@@ -27,6 +27,15 @@ const TERRAIN_WALL_DEPTH = 8
 const EGG_VISUAL_RADIUS = 0.6
 
 /**
+ * Physically-based material tuning. Terrain is rough (matte ground); eggs are
+ * a touch glossier so they catch the sun. metalness stays 0 (non-metallic).
+ */
+const TERRAIN_ROUGHNESS = 0.9
+const TERRAIN_METALNESS = 0
+const EGG_ROUGHNESS = 0.4
+const EGG_METALNESS = 0
+
+/**
  * z of the egg obstacle meshes. Placed on the physics plane (z=0), in front of
  * the terrain strip (whose front face is at TERRAIN_FRONT_Z after the mesh is
  * pushed back), so the eggs read as sitting on the track, not buried in it.
@@ -200,9 +209,14 @@ export function buildTerrainMesh(course: Course): THREE.Mesh {
   geo.setIndex(new THREE.BufferAttribute(indices, 1))
   geo.computeVertexNormals()
 
-  const mat = new THREE.MeshLambertMaterial({
+  // Standard (PBR) material keeps the per-zone vertex colors but adds relief:
+  // roughness-driven shading so hills and walls catch the sun and cast/receive
+  // soft shadows for a genuinely 3D read.
+  const mat = new THREE.MeshStandardMaterial({
     vertexColors: true,
     side: THREE.DoubleSide,
+    roughness: TERRAIN_ROUGHNESS,
+    metalness: TERRAIN_METALNESS,
   })
 
   return new THREE.Mesh(geo, mat)
@@ -216,12 +230,18 @@ export function buildObstacleMeshes(obstacles: Obstacle[]): THREE.Group {
   const group = new THREE.Group()
 
   const eggGeo = new THREE.SphereGeometry(EGG_VISUAL_RADIUS, 10, 8)
-  const eggMat = new THREE.MeshLambertMaterial({ color: 0xff6b6b })
+  const eggMat = new THREE.MeshStandardMaterial({
+    color: 0xff6b6b,
+    roughness: EGG_ROUGHNESS,
+    metalness: EGG_METALNESS,
+  })
 
   for (const obs of obstacles) {
     if (obs.kind !== 'egg') continue
     const mesh = new THREE.Mesh(eggGeo, eggMat)
     mesh.position.set(obs.x, obs.y + EGG_VISUAL_RADIUS, EGG_Z)
+    mesh.castShadow = true
+    mesh.receiveShadow = true
     group.add(mesh)
   }
 
