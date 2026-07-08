@@ -25,7 +25,7 @@
 
 import { describe, it, expect, beforeAll } from 'vitest'
 import RAPIER from '@dimforge/rapier2d-compat'
-import { buildCourse } from '../../src/core/course'
+import { buildCourse, firstZoneOf } from '../../src/core/course'
 import { createWorld } from '../../src/physics/world'
 import { createVehicle, type Vehicle } from '../../src/physics/vehicle'
 import type { ShapeId } from '../../src/core/shapes'
@@ -52,14 +52,23 @@ const REST_SETTLE_STEPS = 300
 /** Generous per-step cap for a full-course drive. */
 const MAX_STEPS = 8000
 
-/** x at which the rocky zone ends / the uphill ramp BEGINS (mirrors course.ts X_ROCKY_END). */
-const X_ROCKY_END = 50
+// Zone-relative anchors, LOCATED on the canonical course rather than hardcoded.
+// The course is now generated; the physics is tuned against buildCourse, so we
+// find "the uphill" / rocky / finish on it. These resolve to the same layout the
+// gates were tuned on (rocky ends where the uphill begins; the ramp top is the
+// uphill zone end; the finish is the course's finishX).
+const CANONICAL = buildCourse()
+const UPHILL_ZONE = firstZoneOf(CANONICAL, 'uphill')!
+const ROCKY_ZONE = firstZoneOf(CANONICAL, 'rocky')!
 
-/** x of the uphill ramp TOP / summit (mirrors course.ts X_UPHILL_END). */
-const X_UPHILL_TOP = 90
+/** x at which the rocky zone ends / the uphill ramp BEGINS. */
+const X_ROCKY_END = UPHILL_ZONE.xStart
 
-/** x of the finish line (mirrors course.ts X_FINISH). */
-const X_FINISH = 230
+/** x of the uphill ramp TOP / summit (canonical ramp tops out at its zone end). */
+const X_UPHILL_TOP = UPHILL_ZONE.xEnd
+
+/** x of the finish line. */
+const X_FINISH = CANONICAL.finishX
 
 /** Shapes grippy enough to summit the slippery ramp (square, triangle). */
 const GRIPPY_SHAPES: ShapeId[] = ['square', 'triangle']
@@ -183,8 +192,8 @@ describe('rocky traversal (anti-stuck)', () => {
     for (let i = 0; i < MAX_STEPS; i++) {
       driveStep(vehicle, world)
       const x = vehicle.position().x
-      if (Number.isNaN(earlyX) && x > 25) earlyX = x
-      if (Number.isNaN(lateX) && x > 40) lateX = x
+      if (Number.isNaN(earlyX) && x > ROCKY_ZONE.xStart + 5) earlyX = x
+      if (Number.isNaN(lateX) && x > ROCKY_ZONE.xEnd - 10) lateX = x
       if (x > X_ROCKY_END) {
         clearedRocky = true
         break
@@ -230,18 +239,20 @@ describe('self-right recovery', () => {
 
 describe('circle drives off from a dead stop anywhere (anti-sleep, never wedged)', () => {
   it('drives off a dead stop settled on a rocky bump and reaches the ramp base', async () => {
-    // Anti-sleep intent: a fully-rested circle on a rocky bump (x=35) must still
-    // drive off and make real forward progress up to the ramp base (x≈50+).
-    const { maxX } = await driveFromRest('circle', 35, 3, 3000)
+    // Anti-sleep intent: a fully-rested circle on a rocky bump (mid rocky zone)
+    // must still drive off and make real forward progress up to the ramp base.
+    const rockyMid = (ROCKY_ZONE.xStart + ROCKY_ZONE.xEnd) / 2
+    const { maxX } = await driveFromRest('circle', rockyMid, 3, 3000)
     expect(maxX, 'circle should not be frozen on the bump').toBeGreaterThan(X_ROCKY_END)
   }, 30000)
 
   it('a circle settled mid-ramp slips back to the flat base (recoverable, not wedged)', async () => {
-    // x=70 sits mid-way up the ramp; y=14 spawns just above the ramp surface
-    // there so the car settles onto it. On the slippery slope the circle cannot
-    // hold — but instead of wedging it slides back DOWN to flat ground. Proves
-    // the slip is a clean recoverable state, never a stuck/reload situation.
-    const { finalX, finalY } = await driveFromRest('circle', 70, 14, 3000)
+    // Mid-way up the ramp; y=14 spawns just above the ramp surface there so the
+    // car settles onto it. On the slippery slope the circle cannot hold — but
+    // instead of wedging it slides back DOWN to flat ground. Proves the slip is a
+    // clean recoverable state, never a stuck/reload situation.
+    const rampMid = (UPHILL_ZONE.xStart + UPHILL_ZONE.xEnd) / 2
+    const { finalX, finalY } = await driveFromRest('circle', rampMid, 14, 3000)
     expect(finalX, 'circle should slide back to the flat base').toBeLessThan(
       X_ROCKY_END + SLIDE_BACK_MARGIN,
     )
@@ -251,7 +262,8 @@ describe('circle drives off from a dead stop anywhere (anti-sleep, never wedged)
   it('a grippy triangle settled mid-ramp climbs out and reaches the finish', async () => {
     // Same mid-ramp dead stop, but on the triangle: it grips, climbs out of the
     // slope and finishes — the grip gate is escapable with the right shape.
-    const { maxX, finishStep } = await driveFromRest('triangle', 70, 14)
+    const rampMid = (UPHILL_ZONE.xStart + UPHILL_ZONE.xEnd) / 2
+    const { maxX, finishStep } = await driveFromRest('triangle', rampMid, 14)
     expect(finishStep, 'triangle should climb out and finish').toBeGreaterThan(0)
     expect(maxX).toBeGreaterThanOrEqual(X_FINISH)
   }, 30000)

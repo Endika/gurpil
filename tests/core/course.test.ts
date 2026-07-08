@@ -1,187 +1,275 @@
 /**
- * Tests for the course model.
+ * Tests for the course model — the SEEDED, difficulty-based generator plus the
+ * canonical reference course.
  *
  * All assertions target real behavior — no mocks, no passthrough tests.
- * buildCourse() is deterministic and pure so every test call is safe.
+ * Determinism: `generateCourse` uses only a seeded PRNG, so equal
+ * `{ difficulty, seed }` always yields an identical track. The completability
+ * suite drives generated tracks on the REAL Rapier engine (no mocks) to prove
+ * every zone is clearable with the right sequence of shapes.
  */
 
-import { describe, it, expect } from 'vitest'
-import { buildCourse } from '../../src/core/course'
+import { describe, it, expect, beforeAll } from 'vitest'
+import RAPIER from '@dimforge/rapier2d-compat'
+import {
+  buildCourse,
+  buildCanonicalCourse,
+  generateCourse,
+  zoneAt,
+  type Course,
+  type Difficulty,
+  type TerrainKind,
+} from '../../src/core/course'
+import { createWorld } from '../../src/physics/world'
+import { createVehicle } from '../../src/physics/vehicle'
+import type { ShapeId } from '../../src/core/shapes'
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard']
 
-/** Return the y values for ground points whose x falls in [xStart, xEnd). */
-function yInRange(ground: { x: number; y: number }[], xStart: number, xEnd: number): number[] {
-  return ground.filter((p) => p.x >= xStart && p.x < xEnd).map((p) => p.y)
+// Known friction tiers the generator may emit (base / mud / ice / uphill).
+const VALID_FRICTIONS = new Set([0.6, 1.2, 0.15, 0.1])
+
+// ─── Structural invariants (generator) ────────────────────────────────────────
+
+describe('generateCourse — structural invariants', () => {
+  const samples: { difficulty: Difficulty; seed: number }[] = []
+  for (const difficulty of DIFFICULTIES) {
+    for (const seed of [1, 2, 7, 99]) samples.push({ difficulty, seed })
+  }
+
+  for (const opts of samples) {
+    describe(`${opts.difficulty} seed=${opts.seed}`, () => {
+      const course = generateCourse(opts)
+
+      it('finishX > startX', () => {
+        expect(course.finishX).toBeGreaterThan(course.startX)
+      })
+
+      it('ground spans startX to finishX', () => {
+        expect(course.ground[0].x).toBe(course.startX)
+        expect(course.ground[course.ground.length - 1].x).toBe(course.finishX)
+      })
+
+      it('ground x values are strictly increasing', () => {
+        for (let i = 1; i < course.ground.length; i++) {
+          expect(course.ground[i].x).toBeGreaterThan(course.ground[i - 1].x)
+        }
+      })
+
+      it('starts and ends with a flat zone (safe spawn + run-out)', () => {
+        expect(course.zones[0].kind).toBe('flat')
+        expect(course.zones[course.zones.length - 1].kind).toBe('flat')
+      })
+
+      it('zones tile [startX, finishX] contiguously', () => {
+        expect(course.zones[0].xStart).toBe(course.startX)
+        expect(course.zones[course.zones.length - 1].xEnd).toBe(course.finishX)
+        for (let i = 1; i < course.zones.length; i++) {
+          expect(course.zones[i].xStart).toBe(course.zones[i - 1].xEnd)
+        }
+      })
+
+      it('surfaceFriction returns a known tier everywhere in bounds', () => {
+        for (let x = course.startX; x < course.finishX; x += 1) {
+          expect(VALID_FRICTIONS.has(course.surfaceFriction(x))).toBe(true)
+        }
+      })
+
+      it('surfaceFriction out-of-bounds is finite base friction (no throw)', () => {
+        expect(() => course.surfaceFriction(-1000)).not.toThrow()
+        expect(course.surfaceFriction(-1000)).toBe(0.6)
+        expect(course.surfaceFriction(course.finishX + 1000)).toBe(0.6)
+      })
+
+      it('every obstacle is a finite egg sitting inside an eggs zone', () => {
+        for (const obs of course.obstacles) {
+          expect(obs.kind).toBe('egg')
+          expect(Number.isFinite(obs.x)).toBe(true)
+          expect(Number.isFinite(obs.y)).toBe(true)
+          expect(zoneAt(course, obs.x)?.kind).toBe('eggs')
+        }
+      })
+    })
+  }
+})
+
+// ─── Determinism ──────────────────────────────────────────────────────────────
+
+function sampleFriction(c: Course): number[] {
+  const out: number[] = []
+  for (let x = c.startX; x <= c.finishX; x += 2) out.push(c.surfaceFriction(x))
+  return out
 }
 
-// ─── Segment x constants — mirror course.ts public shape without importing internals ──
-
-// We derive these from the course output rather than importing private constants,
-// keeping the test independent of implementation details.
-
-describe('buildCourse', () => {
-  const course = buildCourse()
-
-  // ── Structural invariants ──────────────────────────────────────────────────
-
-  it('finishX > startX', () => {
-    expect(course.finishX).toBeGreaterThan(course.startX)
-  })
-
-  it('ground is non-empty', () => {
-    expect(course.ground.length).toBeGreaterThan(0)
-  })
-
-  it('ground x values are strictly increasing', () => {
-    const { ground } = course
-    for (let i = 1; i < ground.length; i++) {
-      expect(ground[i].x).toBeGreaterThan(ground[i - 1].x)
+describe('generateCourse — determinism', () => {
+  it('same {difficulty, seed} → byte-identical track', () => {
+    for (const difficulty of DIFFICULTIES) {
+      const a = generateCourse({ difficulty, seed: 12345 })
+      const b = generateCourse({ difficulty, seed: 12345 })
+      expect(a.startX).toBe(b.startX)
+      expect(a.finishX).toBe(b.finishX)
+      expect(a.ground).toEqual(b.ground)
+      expect(a.obstacles).toEqual(b.obstacles)
+      expect(a.zones).toEqual(b.zones)
+      expect(sampleFriction(a)).toEqual(sampleFriction(b))
     }
   })
 
-  it('ground spans from startX to finishX', () => {
-    const { ground, startX, finishX } = course
-    expect(ground[0].x).toBe(startX)
-    expect(ground[ground.length - 1].x).toBe(finishX)
+  it('different seed → different track (same difficulty)', () => {
+    const a = generateCourse({ difficulty: 'medium', seed: 1 })
+    const b = generateCourse({ difficulty: 'medium', seed: 2 })
+    // Overwhelmingly likely to differ in length and/or geometry.
+    const differs =
+      a.finishX !== b.finishX ||
+      JSON.stringify(a.ground) !== JSON.stringify(b.ground) ||
+      JSON.stringify(a.obstacles) !== JSON.stringify(b.obstacles)
+    expect(differs).toBe(true)
   })
 
-  // ── Obstacles ─────────────────────────────────────────────────────────────
+  it('different difficulty → different track (same seed)', () => {
+    const easy = generateCourse({ difficulty: 'easy', seed: 42 })
+    const hard = generateCourse({ difficulty: 'hard', seed: 42 })
+    expect(easy.finishX).not.toBe(hard.finishX)
+  })
+})
 
-  it('contains at least one egg obstacle', () => {
-    const eggs = course.obstacles.filter((o) => o.kind === 'egg')
-    expect(eggs.length).toBeGreaterThanOrEqual(1)
+// ─── Difficulty monotonicity (averaged over many seeds) ───────────────────────
+
+function avgOver(difficulty: Difficulty, seeds: number, fn: (c: Course) => number): number {
+  let sum = 0
+  for (let seed = 0; seed < seeds; seed++) sum += fn(generateCourse({ difficulty, seed }))
+  return sum / seeds
+}
+
+describe('generateCourse — difficulty monotonicity', () => {
+  const SEEDS = 40
+  const totalLen = (c: Course) => c.finishX - c.startX
+  const hazardCount = (c: Course) => c.zones.length - 2 // minus start + end flats
+  const eggCount = (c: Course) => c.obstacles.length
+  const maxY = (c: Course) => Math.max(...c.ground.map((p) => p.y))
+
+  it('hard is longer than medium, which is longer than easy (on average)', () => {
+    const e = avgOver('easy', SEEDS, totalLen)
+    const m = avgOver('medium', SEEDS, totalLen)
+    const h = avgOver('hard', SEEDS, totalLen)
+    expect(m).toBeGreaterThan(e)
+    expect(h).toBeGreaterThan(m)
   })
 
-  it('every obstacle is of kind egg', () => {
-    for (const obs of course.obstacles) {
-      expect(obs.kind).toBe('egg')
-    }
+  it('hard has more hazard zones than easy (on average)', () => {
+    expect(avgOver('hard', SEEDS, hazardCount)).toBeGreaterThan(avgOver('easy', SEEDS, hazardCount))
   })
 
-  it('obstacles have finite x and y', () => {
-    for (const obs of course.obstacles) {
-      expect(Number.isFinite(obs.x)).toBe(true)
-      expect(Number.isFinite(obs.y)).toBe(true)
-    }
+  it('hard has more eggs than easy (on average)', () => {
+    expect(avgOver('hard', SEEDS, eggCount)).toBeGreaterThan(avgOver('easy', SEEDS, eggCount))
   })
 
-  // ── Uphill segment ────────────────────────────────────────────────────────
-
-  it('uphill segment produces a real y rise', () => {
-    // The uphill zone is somewhere in the middle of the course.
-    // Find the segment with the maximum y in the course — it should be above 0.
-    const maxY = Math.max(...course.ground.map((p) => p.y))
-    // Ground starts at y≈0; uphill must push it clearly above that.
-    expect(maxY).toBeGreaterThan(5)
+  it('hard has steeper/taller hills than easy (on average max height)', () => {
+    expect(avgOver('hard', SEEDS, maxY)).toBeGreaterThan(avgOver('easy', SEEDS, maxY))
   })
+})
 
-  it('uphill y at segment end is greater than y at segment start', () => {
-    // Identify the uphill x-range by scanning for the contiguous rising stretch.
-    // We look for a window where y increases monotonically for a sustained span.
-    const { ground } = course
-    // The uphill zone must contain at least one step where y strictly increases
-    // over a span of at least 10 x units.
-    let riseFound = false
-    for (let i = 0; i < ground.length - 1; i++) {
-      const startPt = ground[i]
-      const endPt = ground[i + 1]
-      const xSpan = endPt.x - startPt.x
-      if (xSpan > 0 && endPt.y > startPt.y + 0.1) {
-        // Found a rising step — now check if there's a sustained rise over ≥10 x units
-        let j = i
-        while (j < ground.length - 1 && ground[j + 1].y >= ground[j].y - 0.01) {
-          j++
-          if (ground[j].x - startPt.x >= 10) {
-            riseFound = true
-            break
-          }
-        }
-        if (riseFound) break
-      }
-    }
-    expect(riseFound).toBe(true)
-  })
+// ─── Canonical reference course ───────────────────────────────────────────────
 
-  // ── surfaceFriction ───────────────────────────────────────────────────────
-
-  it('ice range friction < mud range friction', () => {
-    // Sample a midpoint in each zone using x values from the ground polyline.
-    // We pick x values in the rough second half of the course where ice and mud
-    // should sit, then verify the ordering holds.
-
-    // Strategy: scan through a wide range of x to find the minimum (ice candidate)
-    // and maximum (mud candidate) friction values.
-    const samples: number[] = []
-    for (let x = course.startX; x <= course.finishX; x += 1) {
-      samples.push(course.surfaceFriction(x))
-    }
-    const minFriction = Math.min(...samples)
-    const maxFriction = Math.max(...samples)
-
-    // Ice (low) must be meaningfully below mud (high)
-    expect(minFriction).toBeLessThan(maxFriction)
-  })
-
-  it('surfaceFriction returns a lower value in the ice range than in the mud range', () => {
-    // Identify ice and mud zones by x position: scan the full course and
-    // collect distinct friction values, then compare ice vs mud directly.
-    // We rely on the contract: ice friction < base friction < mud friction.
-
-    // Sample densely to cover all zones
-    const frictions = new Map<number, number[]>()
-    for (let x = course.startX; x <= course.finishX; x += 0.5) {
-      const f = course.surfaceFriction(x)
-      const bucket = Math.round(f * 100)
-      if (!frictions.has(bucket)) frictions.set(bucket, [])
-      frictions.get(bucket)!.push(x)
-    }
-
-    const uniqueFrictionValues = Array.from(frictions.keys())
-      .map((k) => k / 100)
-      .sort((a, b) => a - b)
-
-    // There must be at least two distinct friction tiers
-    expect(uniqueFrictionValues.length).toBeGreaterThanOrEqual(2)
-
-    // The lowest friction value must be strictly below the highest
-    expect(uniqueFrictionValues[0]).toBeLessThan(
-      uniqueFrictionValues[uniqueFrictionValues.length - 1],
-    )
-  })
-
-  it('surfaceFriction out-of-bounds returns base friction (does not throw)', () => {
-    expect(() => course.surfaceFriction(-1000)).not.toThrow()
-    expect(() => course.surfaceFriction(9999)).not.toThrow()
-    expect(Number.isFinite(course.surfaceFriction(-1000))).toBe(true)
-    expect(Number.isFinite(course.surfaceFriction(9999))).toBe(true)
-  })
-
-  // ── Determinism ───────────────────────────────────────────────────────────
-
-  it('buildCourse() is deterministic across two calls', () => {
+describe('buildCourse / buildCanonicalCourse — the tuned reference', () => {
+  it('buildCourse returns the canonical course', () => {
     const a = buildCourse()
-    const b = buildCourse()
-
-    expect(a.startX).toBe(b.startX)
-    expect(a.finishX).toBe(b.finishX)
+    const b = buildCanonicalCourse()
     expect(a.ground).toEqual(b.ground)
     expect(a.obstacles).toEqual(b.obstacles)
-    // surfaceFriction is a closure — compare by sampling, not reference
-    for (let x = a.startX; x <= a.finishX; x += 5) {
-      expect(a.surfaceFriction(x)).toBe(b.surfaceFriction(x))
+    expect(a.finishX).toBe(b.finishX)
+  })
+
+  it('is deterministic across calls', () => {
+    const a = buildCourse()
+    const b = buildCourse()
+    expect(a.ground).toEqual(b.ground)
+    expect(a.obstacles).toEqual(b.obstacles)
+  })
+
+  it('has the tuned zone sequence with an uphill and eggs', () => {
+    const c = buildCourse()
+    expect(c.zones.map((z) => z.kind)).toEqual([
+      'flat',
+      'rocky',
+      'uphill',
+      'mud',
+      'ice',
+      'eggs',
+      'flat',
+    ])
+    expect(c.obstacles.length).toBeGreaterThanOrEqual(1)
+  })
+})
+
+// ─── Completability on the REAL engine ────────────────────────────────────────
+//
+// Proof that every generated track is clearable with the right sequence of
+// shapes (no impossible zone). We drive the whole course start→finish on the
+// real Rapier engine, swapping to the ideal shape for the zone just ahead:
+//   uphill → triangle (grips the slippery ramp), eggs → line (rolls over eggs),
+//   flat/rocky → circle (fast), mud/ice → triangle (safe grip).
+
+const LOOKAHEAD = 8
+const SETTLE_STEPS = 90
+const MAX_DRIVE_STEPS = 30000
+
+function idealShape(kind: TerrainKind): ShapeId {
+  switch (kind) {
+    case 'uphill':
+      return 'triangle'
+    case 'eggs':
+      return 'line'
+    case 'mud':
+    case 'ice':
+      return 'triangle'
+    case 'rocky':
+    case 'flat':
+    default:
+      return 'circle'
+  }
+}
+
+async function driveToFinish(course: Course): Promise<{ maxX: number; finishX: number }> {
+  const world = await createWorld(course)
+  const vehicle = createVehicle(world, { x: course.startX + 2, y: 2 })
+  for (let i = 0; i < SETTLE_STEPS; i++) world.step()
+
+  vehicle.setThrottle(1)
+  let maxX = -Infinity
+  const target = course.finishX - 3 // reaching the run-out means all hazards cleared
+  for (let i = 0; i < MAX_DRIVE_STEPS; i++) {
+    const x = vehicle.position().x
+    // Pre-equip the ideal shape for the zone just ahead (lookahead), falling back
+    // to the current zone near the finish.
+    const zone = zoneAt(course, x + LOOKAHEAD) ?? zoneAt(course, x)
+    if (zone) {
+      const want = idealShape(zone.kind)
+      if (vehicle.currentShape() !== want) vehicle.swapShape(want)
     }
+    vehicle.applyDrive()
+    vehicle.stabilize()
+    world.step()
+    maxX = Math.max(maxX, vehicle.position().x)
+    if (maxX >= target) break
+  }
+  return { maxX, finishX: course.finishX }
+}
+
+describe('generateCourse — completability (real engine)', () => {
+  beforeAll(async () => {
+    await RAPIER.init()
   })
 
-  // ── Ground covers full course span ────────────────────────────────────────
-
-  it('ground array covers all terrain kinds (rocky bumps present)', () => {
-    // Rocky bumps produce a sawtooth — there must be both positive and negative y
-    // values relative to BASE_Y (0) in the rough first third of the course.
-    const rockyZone = yInRange(course.ground, 20, 50)
-    const hasUp = rockyZone.some((y) => y > 0.1)
-    const hasDown = rockyZone.some((y) => y < -0.1)
-    expect(hasUp).toBe(true)
-    expect(hasDown).toBe(true)
-  })
+  for (const difficulty of DIFFICULTIES) {
+    for (const seed of [1, 2]) {
+      it(`${difficulty} seed=${seed} is completable with the right shape sequence`, async () => {
+        const course = generateCourse({ difficulty, seed })
+        const { maxX, finishX } = await driveToFinish(course)
+        expect(maxX, `did not reach the finish (maxX=${maxX.toFixed(1)}, finishX=${finishX})`).toBeGreaterThanOrEqual(
+          finishX - 3,
+        )
+      }, 60000)
+    }
+  }
 })

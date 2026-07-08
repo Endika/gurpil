@@ -25,7 +25,7 @@
 
 import { describe, it, expect, beforeAll } from 'vitest'
 import RAPIER from '@dimforge/rapier2d-compat'
-import { buildCourse } from '../../src/core/course'
+import { buildCourse, firstZoneOf } from '../../src/core/course'
 import { createWorld } from '../../src/physics/world'
 import { createVehicle } from '../../src/physics/vehicle'
 import { SHAPE_IDS, type ShapeId } from '../../src/core/shapes'
@@ -38,6 +38,16 @@ beforeAll(async () => {
 
 /** Steps to let the vehicle settle before applying throttle / measuring. */
 const SETTLE_STEPS = 60
+
+// ─── Zone-relative anchors (located on the canonical course, not hardcoded x) ──
+//
+// The course is now generated; the physics is tuned against the canonical
+// reference (buildCourse). We LOCATE the uphill / first egg on it instead of
+// hardcoding absolute x, so these gates stay meaningful if the canonical layout
+// ever shifts.
+const CANONICAL = buildCourse()
+const UPHILL_ZONE = firstZoneOf(CANONICAL, 'uphill')!
+const FIRST_EGG_X = CANONICAL.obstacles[0].x
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -102,10 +112,11 @@ describe('FLAT differentiation', () => {
 
 describe('SLOPE differentiation (actual course uphill)', () => {
   /**
-   * Settled start at the BASE of the course uphill ramp (x≈52). Both shapes
+   * Settled start just past the BASE of the course uphill ramp. Both shapes
    * begin from the same pose and drive up at full throttle for the same window.
+   * Located relative to the canonical uphill zone (no hardcoded x).
    */
-  const UPHILL_BASE = { x: 52, y: 4 }
+  const UPHILL_BASE = { x: UPHILL_ZONE.xStart + 2, y: 4 }
   const CLIMB_STEPS = 300
 
   /**
@@ -139,10 +150,10 @@ describe('SLOPE differentiation (actual course uphill)', () => {
 
 describe('EGGS differentiation', () => {
   it('line covers the eggs stretch far better than circle in the same window', async () => {
-    // Start just before the first egg (eggs at x = 185,190,195,200,205).
-    // y spawns above the eggs-plateau surface (which sits at the uphill peak
-    // height minus the ice descent) so the vehicle settles onto it.
-    const start = { x: 182, y: 22 }
+    // Start just before the first egg (located on the canonical course, not
+    // hardcoded). y spawns above the eggs-plateau surface (which sits at the
+    // uphill peak height minus the ice descent) so the vehicle settles onto it.
+    const start = { x: FIRST_EGG_X - 3, y: 22 }
     const circle = await runOnCourse('circle', start, 1, 850)
     const line = await runOnCourse('line', start, 1, 850)
 

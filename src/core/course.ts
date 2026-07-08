@@ -2,12 +2,20 @@
  * Course model — pure, framework-agnostic track description.
  *
  * Produces a deterministic polyline (`ground`) and associated metadata for the
- * Gurpil MVP track.  No Three.js, no Rapier, no DOM.
+ * Gurpil track.  No Three.js, no Rapier, no DOM.
+ *
+ * Two ways to obtain a Course:
+ *   - `buildCourse()` / `buildCanonicalCourse()` → the fixed, hand-tuned
+ *     "canonical" track. This is the STABLE REFERENCE the physics is tuned
+ *     against; the physics tests drive it so their per-shape gates stay valid.
+ *   - `generateCourse({ difficulty, seed })` → a SEEDED, difficulty-scaled track
+ *     assembled from the SAME tuned per-zone physics parameters, so every
+ *     generated track is always completable with the right sequence of shapes.
  *
  * Consumers:
- *   - Task 6 (physics): builds Rapier static ground colliders from `ground`;
- *     egg colliders from `obstacles`; applies `surfaceFriction(x)`.
- *   - Task 9 (render): builds the Three.js terrain mesh from `ground`.
+ *   - physics (`src/physics`): builds Rapier static ground colliders from
+ *     `ground`; egg colliders from `obstacles`; applies `surfaceFriction(x)`.
+ *   - render (`src/render`): builds the Three.js terrain mesh from `ground`.
  */
 
 import type { Point } from './classifyStroke'
@@ -22,6 +30,14 @@ export interface Obstacle {
   kind: 'egg'
 }
 
+/** A contiguous terrain zone, exposed so tests + later stages can LOCATE a zone
+ *  (e.g. "the uphill", "the eggs") without hardcoding absolute x positions. */
+export interface Zone {
+  kind: TerrainKind
+  xStart: number
+  xEnd: number
+}
+
 export interface Course {
   /** Left→right polyline of ground surface. x strictly increasing. */
   ground: Point[]
@@ -30,80 +46,70 @@ export interface Course {
   finishX: number
   /** Per-x friction coefficient. Lower on ice, higher on mud. */
   surfaceFriction: (x: number) => number
+  /** Ordered terrain zones spanning [startX, finishX]. */
+  zones: Zone[]
 }
 
-// ─── Segment boundaries (x positions) ────────────────────────────────────────
+export type Difficulty = 'easy' | 'medium' | 'hard'
 
-/** Course origin. */
-const X_START = 0
+export interface CourseOptions {
+  difficulty: Difficulty
+  seed: number
+}
 
-/** End of the flat start zone. */
-const X_FLAT_END = 20
+// ─── Shared terrain physics constants (canonical AND generated) ───────────────
+//
+// These are the hand-tuned values the physics is calibrated against. The
+// generator REUSES them verbatim so a generated track's zones behave exactly
+// like the canonical ones the shape gates were tuned on — this is what keeps
+// every generated track completable with the right shape.
 
-/** End of the rocky bump segment. */
-const X_ROCKY_END = 50
-
-/** End of the uphill ramp. */
-const X_UPHILL_END = 90
-
-/** End of the mud segment. */
-const X_MUD_END = 130
-
-/** End of the ice segment. */
-const X_ICE_END = 170
-
-/** End of the eggs flat stretch. */
-const X_EGGS_END = 210
-
-/** Finish line / end of the run-out. */
-const X_FINISH = 230
-
-// ─── Terrain geometry constants ───────────────────────────────────────────────
-
-/** Ground y at the start zone (roughly "sea level"). */
+/** Ground y baseline ("sea level"). Every zone starts AND ends here, so zones
+ *  compose in any random order with a continuous surface. */
 const BASE_Y = 0
 
+/** Default / base friction applied everywhere outside special zones. */
+const FRICTION_BASE = 0.6
+
+/** Friction in the mud zone (high grip). */
+const FRICTION_MUD = 1.2
+
+/** Friction in the ice zone (low grip). */
+const FRICTION_ICE = 0.15
+
 /**
- * Peak y reached at the top of the uphill ramp (metres above BASE_Y).
+ * Friction of the UPHILL ramp SURFACE — deliberately slippery (the "triangle /
+ * square gate", mirroring the "eggs → line" gate).
  *
- * Grade tuning (playtest "el círculo no sufre penalizaciones en las cuestas"):
- * at the old gentle 8 m rise the 40 m ramp was ~11°, where every wheel shape had
- * more than enough grip to climb at full motor speed — so the low-grip circle was
- * actually FASTER uphill than the grippy triangle (speedMul dominated) and the
- * drawn shape did NOT matter on the slope. Raised so the 40 m ramp grade (~27°,
- * atan(20/40)) sits in the band (verified by the real-engine slope sweep) where
- * wheel grip becomes the binding constraint: the low-grip circle (friction 0.55,
- * see shapes.ts) slips and crawls up slowly, while the grippy triangle (1.3)
- * grips and climbs ~80 % further over the same window. Kept just below the cliff
- * (~29°, PEAK 22) where the circle can no longer restart from a dead stop mid-
- * ramp — at PEAK 20 the circle is clearly PENALISED on the hill but NEVER
- * permanently stuck: it still crawls up and finishes, and switching to triangle
- * is the smart play. Also feeds the mud/ice/eggs plateau height.
+ * Rapier combines the two contacting frictions with the default AVERAGE rule, so
+ * the effective grip on the ramp is (wheelFriction + FRICTION_UPHILL) / 2:
+ *   - circle   (0.55): (0.55 + 0.1)/2 = 0.325  < tan(26.6°)=0.50 → SLIPS.
+ *   - square   (1.1) : (1.1  + 0.1)/2 = 0.60   > 0.50 → grips and climbs.
+ *   - triangle (1.3) : (1.3  + 0.1)/2 = 0.70   > 0.50 → grips and climbs easily.
  */
-const UPHILL_PEAK_Y = 20
+const FRICTION_UPHILL = 0.1
 
 /**
- * Amplitude of the rocky bumps (metres, peak above / trough below BASE_Y).
- *
- * The rocky zone used to be a SAWTOOTH (each period ended in a vertical cliff),
- * which wedged the ~2 m car between "spikes" and could permanently stick it.
- * It is now a SMOOTH, continuous sine wave — bumpy enough that a circle wheel is
- * visibly rougher/slower here than the ski, but with NO vertical cliffs, so the
- * car can always climb over. Amplitude kept low and the period long enough that
- * the local slope never exceeds what a circle can mount.
+ * Maximum uphill GRADE (rise/run) the generator will ever emit. This is the
+ * canonical ramp grade (rise 20 over run 40 = 0.5, ~26.6°): the KNOWN-SAFE
+ * ceiling where the grippy triangle still summits but the low-grip circle slips.
+ * Generated hills are capped here so a triangle can always clear them.
  */
-const ROCKY_BUMP_AMPLITUDE = 0.45
+const UPHILL_MAX_GRADE = 0.5
 
 /**
- * Period (x-width) of one full sine cycle in the rocky zone.
- * Chosen so the 30 m rocky span [20,50) holds a whole number of cycles (5),
- * making the wave start AND end at BASE_Y — continuous with the flat zone
- * before it and the uphill ramp after it (no step at the segment joins).
+ * Maximum local slope allowed on the rocky sine bumps. Matches the canonical
+ * rocky wave's peak slope (amp 0.45, period 6 → 0.45·2π/6 ≈ 0.47). The generator
+ * derives each rocky zone's wave period from its amplitude so this cap is never
+ * exceeded — guaranteeing a circle can always mount the bumps (no wedging).
  */
-const ROCKY_BUMP_PERIOD = 6
+const ROCKY_MAX_SLOPE = 0.47
 
-/** Slope of the ice segment: slight downhill (y decreases by this per unit x). */
-const ICE_DOWNHILL_SLOPE = 0.05
+/** Egg spacing / lead-in / trailing run within an eggs zone (metres).
+ *  Spacing is the canonical value so the LINE still clears the eggs. */
+const EGG_SPACING = 5
+const EGG_LEAD_IN = 15
+const EGG_TRAIL = 10
 
 /**
  * Sample points per unit x for STRAIGHT segments (flat / linear ramps). One per
@@ -121,52 +127,7 @@ const POINTS_PER_UNIT = 1
  */
 const CURVED_POINTS_PER_UNIT = 4
 
-// ─── Friction constants ───────────────────────────────────────────────────────
-
-/** Default / base friction applied everywhere outside special zones. */
-const FRICTION_BASE = 0.6
-
-/** Friction in the mud zone (high grip). */
-const FRICTION_MUD = 1.2
-
-/** Friction in the ice zone (low grip). */
-const FRICTION_ICE = 0.15
-
-/**
- * Friction of the UPHILL ramp SURFACE — deliberately slippery (the "triangle /
- * square gate", mirroring the "eggs → line" gate).
- *
- * Playtest: "no veo que en las cuestas el círculo se penalice" — the previous
- * gentle slope penalty (just making the low-grip circle a bit slower uphill) was
- * imperceptible in a single auto-throttle run. Fix: make GRIP the binding
- * constraint on the ramp so the drawn shape is felt as a hard pass/fail, exactly
- * like the eggs require the line.
- *
- * Rapier combines the two contacting frictions with the default AVERAGE rule, so
- * the effective grip on the ramp is (wheelFriction + FRICTION_UPHILL) / 2:
- *   - circle   (0.55): (0.55 + 0.1)/2 = 0.325  < tan(26.6°)=0.50 → SLIPS: the
- *     wheel spins, transmits no traction, gravity wins and the car slides back
- *     down to the flat base. It CANNOT summit on the circle.
- *   - square   (1.1) : (1.1  + 0.1)/2 = 0.60   > 0.50 → grips and climbs.
- *   - triangle (1.3) : (1.3  + 0.1)/2 = 0.70   > 0.50 → grips and climbs easily.
- *
- * This is LOCALISED to the ramp x-range [X_ROCKY_END, X_UPHILL_END): it does not
- * touch flat driving, from-rest-on-flat settling, or the swap anti-pop scenarios
- * (all on FRICTION_BASE terrain) — those broke previously when the CIRCLE'S
- * COLLIDER friction was lowered globally. Verified against the real-engine slope
- * sweep: at this grade + surface friction the circle plateaus ~6 m up the ramp
- * (maxX ≈ 56, ramp top = 90) then slides back to x ≈ 50, while the triangle and
- * square summit and reach the finish. The slip is fully recoverable: swapping to
- * a triangle at the ramp lets the run continue (no dead-end, no reload).
- */
-const FRICTION_UPHILL = 0.1
-
-// ─── Egg obstacle constants ───────────────────────────────────────────────────
-
-/** x positions (absolute) of egg obstacles within the eggs stretch. */
-const EGG_X_POSITIONS: readonly number[] = [185, 190, 195, 200, 205]
-
-// ─── Segment definitions (drives both buildCourse and surfaceFriction) ────────
+// ─── Internal segment model (drives ground + surfaceFriction + zones) ─────────
 
 interface SegmentDef {
   kind: TerrainKind
@@ -179,145 +140,410 @@ interface SegmentDef {
   curved?: boolean
 }
 
-/**
- * Compute y at the start of the uphill ramp (end of rocky zone).
- * Rocky bumps leave the surface at y=BASE_Y on average; the ramp starts there.
- */
-function rockyY(x: number): number {
-  // Smooth sine bumps: continuous with no vertical cliffs (unlike the old
-  // sawtooth). Rises to +amp and dips to -amp over each ROCKY_BUMP_PERIOD, and
-  // returns to BASE_Y at the zone ends (whole number of cycles).
-  const phase = (x - X_FLAT_END) / ROCKY_BUMP_PERIOD
-  return BASE_Y + ROCKY_BUMP_AMPLITUDE * Math.sin(2 * Math.PI * phase)
-}
+// ─── Shared assemblers (used by canonical AND generated builders) ─────────────
 
-function uphillY(x: number): number {
-  const t = (x - X_ROCKY_END) / (X_UPHILL_END - X_ROCKY_END)
-  return BASE_Y + t * UPHILL_PEAK_Y
-}
-
-function iceY(x: number): number {
-  // Slight downhill from UPHILL_PEAK_Y, starting at y=UPHILL_PEAK_Y at X_MUD_END
-  const dx = x - X_MUD_END
-  return UPHILL_PEAK_Y - dx * ICE_DOWNHILL_SLOPE
-}
-
-const SEGMENTS: SegmentDef[] = [
-  {
-    kind: 'flat',
-    xStart: X_START,
-    xEnd: X_FLAT_END,
-    friction: FRICTION_BASE,
-    y: () => BASE_Y,
-  },
-  {
-    kind: 'rocky',
-    xStart: X_FLAT_END,
-    xEnd: X_ROCKY_END,
-    friction: FRICTION_BASE,
-    y: rockyY,
-    curved: true,
-  },
-  {
-    kind: 'uphill',
-    xStart: X_ROCKY_END,
-    xEnd: X_UPHILL_END,
-    friction: FRICTION_UPHILL,
-    y: uphillY,
-  },
-  {
-    kind: 'mud',
-    xStart: X_UPHILL_END,
-    xEnd: X_MUD_END,
-    friction: FRICTION_MUD,
-    y: () => UPHILL_PEAK_Y,
-  },
-  {
-    kind: 'ice',
-    xStart: X_MUD_END,
-    xEnd: X_ICE_END,
-    friction: FRICTION_ICE,
-    y: iceY,
-  },
-  {
-    kind: 'eggs',
-    xStart: X_ICE_END,
-    xEnd: X_EGGS_END,
-    friction: FRICTION_BASE,
-    y: () => UPHILL_PEAK_Y - (X_ICE_END - X_MUD_END) * ICE_DOWNHILL_SLOPE,
-  },
-  {
-    kind: 'flat',
-    xStart: X_EGGS_END,
-    xEnd: X_FINISH,
-    friction: FRICTION_BASE,
-    y: () => UPHILL_PEAK_Y - (X_ICE_END - X_MUD_END) * ICE_DOWNHILL_SLOPE,
-  },
-]
-
-// ─── Public API ────────────────────────────────────────────────────────────────
-
-/**
- * Build the deterministic MVP course.
- *
- * Calling `buildCourse()` twice always yields identical `ground`, `obstacles`,
- * `startX`, and `finishX` — no random state used.
- */
-export function buildCourse(): Course {
-  const ground = buildGround()
-  const obstacles = buildObstacles()
-
-  return {
-    ground,
-    obstacles,
-    startX: X_START,
-    finishX: X_FINISH,
-    surfaceFriction: surfaceFriction,
-  }
-}
-
-// ─── Internal builders ─────────────────────────────────────────────────────────
-
-function buildGround(): Point[] {
+function buildGroundFrom(segments: SegmentDef[], finishX: number): Point[] {
   const points: Point[] = []
 
-  for (const seg of SEGMENTS) {
+  for (const seg of segments) {
     const density = seg.curved ? CURVED_POINTS_PER_UNIT : POINTS_PER_UNIT
     const step = 1 / density
-    // Emit one point at every step; for continuity the first point of each
-    // segment is at seg.xStart (the last segment's final point is at xEnd).
-    // Round to avoid float drift breaking strict-increasing x at joins.
+    // Emit one point at every step; the first point of each segment is at
+    // seg.xStart. Stop just before xEnd so the next segment's xStart is the next
+    // point (strictly increasing x, no duplicate at joins).
     for (let x = seg.xStart; x < seg.xEnd - 1e-9; x += step) {
       points.push({ x, y: seg.y(x) })
     }
   }
 
-  // Add the final finish point explicitly to cap the polyline at X_FINISH
-  const lastSeg = SEGMENTS[SEGMENTS.length - 1]
-  points.push({ x: X_FINISH, y: lastSeg.y(X_FINISH) })
+  // Cap the polyline at finishX with an explicit final point.
+  const lastSeg = segments[segments.length - 1]
+  points.push({ x: finishX, y: lastSeg.y(finishX) })
 
   return points
 }
 
-function buildObstacles(): Obstacle[] {
-  const eggSeg = SEGMENTS.find((s) => s.kind === 'eggs')!
-  return EGG_X_POSITIONS.map((x) => ({
-    x,
-    y: eggSeg.y(x),
-    kind: 'egg' as const,
-  }))
+function makeSurfaceFriction(segments: SegmentDef[]): (x: number) => number {
+  return (x: number): number => {
+    for (const seg of segments) {
+      if (x >= seg.xStart && x < seg.xEnd) return seg.friction
+    }
+    // Exact finish boundary or beyond course bounds.
+    return FRICTION_BASE
+  }
+}
+
+function toZones(segments: SegmentDef[]): Zone[] {
+  return segments.map((s) => ({ kind: s.kind, xStart: s.xStart, xEnd: s.xEnd }))
+}
+
+function assembleCourse(
+  segments: SegmentDef[],
+  obstacles: Obstacle[],
+  startX: number,
+  finishX: number,
+): Course {
+  return {
+    ground: buildGroundFrom(segments, finishX),
+    obstacles,
+    startX,
+    finishX,
+    surfaceFriction: makeSurfaceFriction(segments),
+    zones: toZones(segments),
+  }
+}
+
+// ─── Zone location helpers (for tests + later stages) ─────────────────────────
+
+/** All zones of a given kind, in order. */
+export function zonesOf(course: Course, kind: TerrainKind): Zone[] {
+  return course.zones.filter((z) => z.kind === kind)
+}
+
+/** The first zone of a given kind, or undefined if the course has none. */
+export function firstZoneOf(course: Course, kind: TerrainKind): Zone | undefined {
+  return course.zones.find((z) => z.kind === kind)
+}
+
+/** The zone containing x (xStart ≤ x < xEnd), or undefined if out of bounds. */
+export function zoneAt(course: Course, x: number): Zone | undefined {
+  return course.zones.find((z) => x >= z.xStart && x < z.xEnd)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  CANONICAL COURSE — the fixed, hand-tuned reference track.
+//  The physics is tuned against THIS layout; the physics tests drive it.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/** Course origin. */
+const X_START = 0
+/** End of the flat start zone. */
+const X_FLAT_END = 20
+/** End of the rocky bump segment. */
+const X_ROCKY_END = 50
+/** End of the uphill ramp. */
+const X_UPHILL_END = 90
+/** End of the mud segment. */
+const X_MUD_END = 130
+/** End of the ice segment. */
+const X_ICE_END = 170
+/** End of the eggs flat stretch. */
+const X_EGGS_END = 210
+/** Finish line / end of the run-out. */
+const X_FINISH = 230
+
+/** Peak y at the top of the canonical uphill ramp (metres above BASE_Y). Grade
+ *  = 20/40 = 0.5 = UPHILL_MAX_GRADE: the tuned ceiling where the triangle
+ *  summits and the circle slips. */
+const UPHILL_PEAK_Y = 20
+
+/** Amplitude of the canonical rocky bumps (smooth sine, no vertical cliffs). */
+const ROCKY_BUMP_AMPLITUDE = 0.45
+/** Period (x-width) of one canonical rocky sine cycle. 5 whole cycles in [20,50). */
+const ROCKY_BUMP_PERIOD = 6
+/** Slope of the canonical ice segment: slight downhill. */
+const ICE_DOWNHILL_SLOPE = 0.05
+/** x positions (absolute) of the canonical egg obstacles. */
+const EGG_X_POSITIONS: readonly number[] = [185, 190, 195, 200, 205]
+
+function canonicalRockyY(x: number): number {
+  const phase = (x - X_FLAT_END) / ROCKY_BUMP_PERIOD
+  return BASE_Y + ROCKY_BUMP_AMPLITUDE * Math.sin(2 * Math.PI * phase)
+}
+function canonicalUphillY(x: number): number {
+  const t = (x - X_ROCKY_END) / (X_UPHILL_END - X_ROCKY_END)
+  return BASE_Y + t * UPHILL_PEAK_Y
+}
+function canonicalIceY(x: number): number {
+  const dx = x - X_MUD_END
+  return UPHILL_PEAK_Y - dx * ICE_DOWNHILL_SLOPE
+}
+const CANONICAL_EGGS_Y = UPHILL_PEAK_Y - (X_ICE_END - X_MUD_END) * ICE_DOWNHILL_SLOPE
+
+const CANONICAL_SEGMENTS: SegmentDef[] = [
+  { kind: 'flat', xStart: X_START, xEnd: X_FLAT_END, friction: FRICTION_BASE, y: () => BASE_Y },
+  { kind: 'rocky', xStart: X_FLAT_END, xEnd: X_ROCKY_END, friction: FRICTION_BASE, y: canonicalRockyY, curved: true },
+  { kind: 'uphill', xStart: X_ROCKY_END, xEnd: X_UPHILL_END, friction: FRICTION_UPHILL, y: canonicalUphillY },
+  { kind: 'mud', xStart: X_UPHILL_END, xEnd: X_MUD_END, friction: FRICTION_MUD, y: () => UPHILL_PEAK_Y },
+  { kind: 'ice', xStart: X_MUD_END, xEnd: X_ICE_END, friction: FRICTION_ICE, y: canonicalIceY },
+  { kind: 'eggs', xStart: X_ICE_END, xEnd: X_EGGS_END, friction: FRICTION_BASE, y: () => CANONICAL_EGGS_Y },
+  { kind: 'flat', xStart: X_EGGS_END, xEnd: X_FINISH, friction: FRICTION_BASE, y: () => CANONICAL_EGGS_Y },
+]
+
+/**
+ * Build the fixed, hand-tuned canonical course. Deterministic and pure: two
+ * calls always yield identical ground/obstacles/startX/finishX (no random state).
+ */
+export function buildCanonicalCourse(): Course {
+  const eggSeg = CANONICAL_SEGMENTS.find((s) => s.kind === 'eggs')!
+  const obstacles: Obstacle[] = EGG_X_POSITIONS.map((x) => ({ x, y: eggSeg.y(x), kind: 'egg' as const }))
+  return assembleCourse(CANONICAL_SEGMENTS, obstacles, X_START, X_FINISH)
 }
 
 /**
- * Returns the friction coefficient at position `x`.
- * Looks up the matching segment; falls back to FRICTION_BASE for out-of-range x.
+ * Build the default MVP course.
+ *
+ * Thin wrapper over `buildCanonicalCourse()` so a STABLE reference track exists:
+ * the physics is tuned against it and the physics tests drive it. Deterministic.
  */
-function surfaceFriction(x: number): number {
-  for (const seg of SEGMENTS) {
-    if (x >= seg.xStart && x < seg.xEnd) {
-      return seg.friction
-    }
+export function buildCourse(): Course {
+  return buildCanonicalCourse()
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  SEEDED, DIFFICULTY-BASED GENERATOR
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Seeded PRNG (mulberry32) — deterministic, no Math.random/Date ────────────
+
+/**
+ * mulberry32: a tiny, fast, deterministic 32-bit PRNG. Same seed → same stream.
+ * Returns a function yielding floats in [0, 1).
+ */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0
+  return function (): number {
+    a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
   }
-  // Exact finish boundary or beyond course bounds
-  return FRICTION_BASE
+}
+
+type Rng = () => number
+
+/** Float in [min, max). */
+function randRange(rng: Rng, min: number, max: number): number {
+  return min + rng() * (max - min)
+}
+/** Integer in [min, max] inclusive. */
+function randInt(rng: Rng, min: number, max: number): number {
+  return Math.floor(randRange(rng, min, max + 1))
+}
+/** A random element of a non-empty array. */
+function pick<T>(rng: Rng, items: readonly T[]): T {
+  return items[Math.floor(rng() * items.length)]
+}
+
+// ─── Difficulty parameter table ───────────────────────────────────────────────
+//
+// Every hazard parameter is a named range here — no magic values scattered in
+// the generator. Easy = shorter, gentler, fewer hazards; hard = longer, steeper,
+// more hazards. Steepness/spacing are bounded by the shared tuned ceilings above
+// (UPHILL_MAX_GRADE, ROCKY_MAX_SLOPE, EGG_SPACING) so every difficulty stays
+// completable with the right shape.
+
+interface DifficultyParams {
+  /** Flat run-in length at the start (metres). */
+  flatStartLen: number
+  /** Flat run-out length before the finish (metres). */
+  flatEndLen: number
+  /** Number of hazard zones between the start and end flats (inclusive range). */
+  hazardCount: [number, number]
+  /** Which hazard kinds may appear at this difficulty. */
+  hazards: readonly TerrainKind[]
+  /** Uphill grade (rise/run) range; clamped to UPHILL_MAX_GRADE. */
+  hillGrade: [number, number]
+  /** Uphill total (up-and-over) length range (metres). */
+  hillLen: [number, number]
+  /** Rocky sine amplitude range (metres). */
+  rockyAmp: [number, number]
+  /** Rocky zone length range (metres). */
+  rockyLen: [number, number]
+  /** Mud zone length range (metres). */
+  mudLen: [number, number]
+  /** Ice zone length range (metres). */
+  iceLen: [number, number]
+  /** Number of eggs in an eggs zone (inclusive range). */
+  eggCount: [number, number]
+}
+
+export const DIFFICULTY_PARAMS: Record<Difficulty, DifficultyParams> = {
+  easy: {
+    flatStartLen: 20,
+    flatEndLen: 20,
+    hazardCount: [2, 3],
+    hazards: ['rocky', 'uphill', 'mud', 'eggs'],
+    hillGrade: [0.28, 0.4],
+    hillLen: [24, 40],
+    rockyAmp: [0.3, 0.45],
+    rockyLen: [18, 28],
+    mudLen: [18, 28],
+    iceLen: [18, 28],
+    eggCount: [3, 4],
+  },
+  medium: {
+    flatStartLen: 20,
+    flatEndLen: 20,
+    hazardCount: [3, 5],
+    hazards: ['rocky', 'uphill', 'mud', 'ice', 'eggs'],
+    hillGrade: [0.38, 0.46],
+    hillLen: [36, 64],
+    rockyAmp: [0.4, 0.55],
+    rockyLen: [24, 36],
+    mudLen: [28, 44],
+    iceLen: [28, 44],
+    eggCount: [4, 6],
+  },
+  hard: {
+    flatStartLen: 20,
+    flatEndLen: 20,
+    hazardCount: [5, 7],
+    hazards: ['rocky', 'uphill', 'mud', 'ice', 'eggs'],
+    hillGrade: [0.44, 0.5],
+    hillLen: [56, 90],
+    rockyAmp: [0.5, 0.62],
+    rockyLen: [30, 46],
+    mudLen: [40, 58],
+    iceLen: [40, 58],
+    eggCount: [6, 9],
+  },
+}
+
+/** Canonical seed used when a stable "default generated" track is wanted. */
+export const CANONICAL_SEED = 1
+
+// ─── Zone builders (each returns a SegmentDef starting/ending at BASE_Y) ──────
+
+interface BuiltZone {
+  seg: SegmentDef
+  obstacles?: Obstacle[]
+}
+
+function flatZone(xStart: number, len: number): BuiltZone {
+  return {
+    seg: { kind: 'flat', xStart, xEnd: xStart + len, friction: FRICTION_BASE, y: () => BASE_Y },
+  }
+}
+
+function rockyZone(rng: Rng, xStart: number, p: DifficultyParams): BuiltZone {
+  const amp = randRange(rng, p.rockyAmp[0], p.rockyAmp[1])
+  const len = Math.round(randRange(rng, p.rockyLen[0], p.rockyLen[1]))
+  // Derive the number of whole sine cycles so the local slope never exceeds
+  // ROCKY_MAX_SLOPE. slope_max = amp·2π/period ≤ cap ⇒ period ≥ amp·2π/cap.
+  // floor keeps period ≥ that minimum (slope ≤ cap); whole cycles return to BASE_Y.
+  const minPeriod = (amp * 2 * Math.PI) / ROCKY_MAX_SLOPE
+  const cycles = Math.max(1, Math.floor(len / minPeriod))
+  const period = len / cycles
+  const xEnd = xStart + len
+  return {
+    seg: {
+      kind: 'rocky',
+      xStart,
+      xEnd,
+      friction: FRICTION_BASE,
+      curved: true,
+      y: (x: number) => BASE_Y + amp * Math.sin((2 * Math.PI * (x - xStart)) / period),
+    },
+  }
+}
+
+function uphillZone(rng: Rng, xStart: number, p: DifficultyParams): BuiltZone {
+  const grade = Math.min(UPHILL_MAX_GRADE, randRange(rng, p.hillGrade[0], p.hillGrade[1]))
+  const len = Math.round(randRange(rng, p.hillLen[0], p.hillLen[1]))
+  const half = len / 2
+  const xEnd = xStart + len
+  // Up-and-over hill: rises at `grade` to a peak at the midpoint, then descends
+  // back to BASE_Y. The up-side is identical physics to the canonical ramp, so
+  // the triangle summits it and the circle slips — the SAME grip gate.
+  return {
+    seg: {
+      kind: 'uphill',
+      xStart,
+      xEnd,
+      friction: FRICTION_UPHILL,
+      y: (x: number): number => {
+        const dx = x - xStart
+        return BASE_Y + (dx <= half ? dx : len - dx) * grade
+      },
+    },
+  }
+}
+
+function mudZone(rng: Rng, xStart: number, p: DifficultyParams): BuiltZone {
+  const len = Math.round(randRange(rng, p.mudLen[0], p.mudLen[1]))
+  return { seg: { kind: 'mud', xStart, xEnd: xStart + len, friction: FRICTION_MUD, y: () => BASE_Y } }
+}
+
+function iceZone(rng: Rng, xStart: number, p: DifficultyParams): BuiltZone {
+  const len = Math.round(randRange(rng, p.iceLen[0], p.iceLen[1]))
+  return { seg: { kind: 'ice', xStart, xEnd: xStart + len, friction: FRICTION_ICE, y: () => BASE_Y } }
+}
+
+function eggsZone(rng: Rng, xStart: number, p: DifficultyParams): BuiltZone {
+  const count = randInt(rng, p.eggCount[0], p.eggCount[1])
+  // Length derived from the egg count so the eggs always fit with a lead-in and
+  // a trailing run, at the canonical EGG_SPACING (keeps the LINE able to clear).
+  const len = EGG_LEAD_IN + (count - 1) * EGG_SPACING + EGG_TRAIL
+  const obstacles: Obstacle[] = []
+  for (let i = 0; i < count; i++) {
+    obstacles.push({ x: xStart + EGG_LEAD_IN + i * EGG_SPACING, y: BASE_Y, kind: 'egg' })
+  }
+  return {
+    seg: { kind: 'eggs', xStart, xEnd: xStart + len, friction: FRICTION_BASE, y: () => BASE_Y },
+    obstacles,
+  }
+}
+
+function buildHazard(kind: TerrainKind, rng: Rng, xStart: number, p: DifficultyParams): BuiltZone {
+  switch (kind) {
+    case 'rocky':
+      return rockyZone(rng, xStart, p)
+    case 'uphill':
+      return uphillZone(rng, xStart, p)
+    case 'mud':
+      return mudZone(rng, xStart, p)
+    case 'ice':
+      return iceZone(rng, xStart, p)
+    case 'eggs':
+      return eggsZone(rng, xStart, p)
+    case 'flat':
+      return flatZone(xStart, Math.round(randRange(rng, p.mudLen[0], p.mudLen[1])))
+  }
+}
+
+// ─── Public generator ──────────────────────────────────────────────────────────
+
+/**
+ * Generate a SEEDED, difficulty-scaled course.
+ *
+ * DETERMINISTIC: identical `{ difficulty, seed }` → identical ground / obstacles
+ * / startX / finishX. Uses only the seeded PRNG (no Math.random / Date).
+ *
+ * Structure: a flat start run-in → a randomized sequence of hazard zones (each
+ * starting and ending at BASE_Y so they compose in any order) → a flat run-out →
+ * the finish. Difficulty scales total length, hazard count, uphill steepness,
+ * egg density, mud/ice presence and length, and rocky amplitude — all bounded by
+ * the shared tuned ceilings so every generated track stays completable with the
+ * right sequence of shapes.
+ */
+export function generateCourse(opts: CourseOptions): Course {
+  const p = DIFFICULTY_PARAMS[opts.difficulty]
+  const rng = mulberry32(opts.seed)
+
+  const segments: SegmentDef[] = []
+  const obstacles: Obstacle[] = []
+  let x = X_START
+
+  // Flat start run-in.
+  const start = flatZone(x, p.flatStartLen)
+  segments.push(start.seg)
+  x = start.seg.xEnd
+
+  // Randomized hazard sequence.
+  const nHazards = randInt(rng, p.hazardCount[0], p.hazardCount[1])
+  for (let i = 0; i < nHazards; i++) {
+    const kind = pick(rng, p.hazards)
+    const built = buildHazard(kind, rng, x, p)
+    segments.push(built.seg)
+    if (built.obstacles) obstacles.push(...built.obstacles)
+    x = built.seg.xEnd
+  }
+
+  // Flat run-out.
+  const end = flatZone(x, p.flatEndLen)
+  segments.push(end.seg)
+  x = end.seg.xEnd
+
+  return assembleCourse(segments, obstacles, X_START, x)
 }
