@@ -8,6 +8,8 @@ import {
   saveLevelResult,
   isLevelUnlocked,
   highestUnlocked,
+  loadEndlessBest,
+  saveEndlessDistance,
   type KeyValueStore,
 } from '../../src/core/records'
 import { CAMPAIGN_SIZE } from '../../src/core/campaign'
@@ -244,5 +246,58 @@ describe('isLevelUnlocked / highestUnlocked', () => {
     const store = createMemoryStore()
     for (let n = 1; n <= CAMPAIGN_SIZE; n++) saveLevelResult(store, n, 5000, 'gold')
     expect(highestUnlocked(store)).toBe(CAMPAIGN_SIZE)
+  })
+})
+
+describe('loadEndlessBest / saveEndlessDistance', () => {
+  it('loadEndlessBest is 0 on a fresh store', () => {
+    expect(loadEndlessBest(createMemoryStore())).toBe(0)
+  })
+
+  it('saveEndlessDistance persists and loadEndlessBest round-trips it', () => {
+    const store = createMemoryStore()
+    const saved = saveEndlessDistance(store, 1234.5)
+    expect(saved).toBe(1234.5)
+    expect(loadEndlessBest(store)).toBe(1234.5)
+  })
+
+  it('only increases: a shorter follow-up does not regress the best', () => {
+    const store = createMemoryStore()
+    saveEndlessDistance(store, 900)
+    const after = saveEndlessDistance(store, 300)
+    expect(after).toBe(900)
+    expect(loadEndlessBest(store)).toBe(900)
+  })
+
+  it('improves on a longer follow-up', () => {
+    const store = createMemoryStore()
+    saveEndlessDistance(store, 500)
+    const after = saveEndlessDistance(store, 1500)
+    expect(after).toBe(1500)
+  })
+
+  it('treats a negative distance as 0', () => {
+    const store = createMemoryStore()
+    expect(saveEndlessDistance(store, -50)).toBe(0)
+    expect(loadEndlessBest(store)).toBe(0)
+  })
+
+  it('loadEndlessBest falls back to 0 on a corrupt (non-numeric) value', () => {
+    const store = createMemoryStore()
+    store.set('gurpil.endless.best', 'not a number')
+    expect(loadEndlessBest(store)).toBe(0)
+  })
+
+  it('loadEndlessBest falls back to 0 on a negative stored value', () => {
+    const store = createMemoryStore()
+    store.set('gurpil.endless.best', '-42')
+    expect(loadEndlessBest(store)).toBe(0)
+  })
+
+  it('does not collide with the per-difficulty or per-level key space', () => {
+    const store = createMemoryStore()
+    saveResult(store, 'easy', 5000, 'gold')
+    saveLevelResult(store, 1, 5000, 'gold')
+    expect(loadEndlessBest(store)).toBe(0)
   })
 })

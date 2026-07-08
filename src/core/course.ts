@@ -814,3 +814,135 @@ export function generateCourse(opts: CourseOptions): Course {
 
   return assembleCourse(segments, obstacles, X_START, x)
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  ENDLESS COURSE — a very long, distance-ramped track for the arcade mode.
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Structure mirrors generateCourse (flat start-in → hazard sequence → flat run-out)
+// but is MUCH longer and its difficulty RAMPS with x: gentle near the start,
+// progressively harder further along. The ramp is a single interpolation between
+// the tuned `beginner` params (easiest) and the tuned `expert` params (hardest):
+// because every hazard builder ALREADY clamps steepness/slope/spacing to the
+// shared completable ceilings (UPHILL_MAX_GRADE, ROCKY_MAX_SLOPE, EGG_SPACING),
+// ANY point on that interpolation is still clearable with the right shape — so the
+// whole ramp stays completable everywhere, no dead-ends. Deterministic (seed only;
+// difficulty is a function of x, not a tier).
+
+/** Flat run-in at the very start of an endless course (metres). */
+const ENDLESS_START_FLAT_LEN = 24
+/** Flat run-out capping the far end of an endless course (metres). */
+const ENDLESS_END_FLAT_LEN = 20
+/**
+ * Distance (metres from startX) over which difficulty ramps from the `beginner`
+ * floor up to the `expert` ceiling. Past this the course stays at max difficulty.
+ */
+const ENDLESS_RAMP_DISTANCE = 3000
+/**
+ * Target total length (metres). Long enough that a good run rarely reaches the end
+ * within the time budget; if it does, that's fine — the timer ends the run.
+ */
+const ENDLESS_TARGET_LENGTH = 6000
+/**
+ * Ramp progress at which harder hazard kinds unlock, so the opening stays gentle:
+ * ramps join once past this fraction of the ramp, ice once past twice it.
+ */
+const ENDLESS_RAMP_UNLOCK = 0.12
+const ENDLESS_ICE_UNLOCK = 0.24
+
+/** Gentle hazard palette used at the very start (no ramps, no ice). */
+const ENDLESS_HAZARDS_GENTLE: readonly TerrainKind[] = [
+  'rocky',
+  'uphill',
+  'mud',
+  'eggs',
+  'bridge',
+  'water',
+]
+
+/** Linear interpolation between a and b at t∈[0,1]. */
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t
+}
+
+/** Interpolate an inclusive numeric range between two tiers at ramp progress t. */
+function lerpRange(a: readonly [number, number], b: readonly [number, number], t: number): [number, number] {
+  return [lerp(a[0], b[0], t), lerp(a[1], b[1], t)]
+}
+
+/**
+ * Difficulty params at ramp progress t∈[0,1], interpolated field-by-field from the
+ * `beginner` floor (t=0) to the `expert` ceiling (t=1). Every metric is monotonic
+ * in t (beginner ≤ expert on all of them), so the course genuinely gets harder the
+ * further you go, while each value stays within its tuned completable range.
+ */
+function endlessParamsAt(t: number): DifficultyParams {
+  const lo = DIFFICULTY_PARAMS.beginner
+  const hi = DIFFICULTY_PARAMS.expert
+  const c = Math.min(1, Math.max(0, t))
+  return {
+    flatStartLen: ENDLESS_START_FLAT_LEN,
+    flatEndLen: ENDLESS_END_FLAT_LEN,
+    // hazardCount is unused in the endless loop (we place zones until the target
+    // length), but keep a sensible interpolated value for shape completeness.
+    hazardCount: [Math.round(lerp(lo.hazardCount[0], hi.hazardCount[0], c)), Math.round(lerp(lo.hazardCount[1], hi.hazardCount[1], c))],
+    hazards: endlessHazardsAt(c),
+    hillGrade: lerpRange(lo.hillGrade, hi.hillGrade, c),
+    hillLen: lerpRange(lo.hillLen, hi.hillLen, c),
+    rockyAmp: lerpRange(lo.rockyAmp, hi.rockyAmp, c),
+    rockyLen: lerpRange(lo.rockyLen, hi.rockyLen, c),
+    mudLen: lerpRange(lo.mudLen, hi.mudLen, c),
+    iceLen: lerpRange(lo.iceLen, hi.iceLen, c),
+    eggCount: lerpRange(lo.eggCount, hi.eggCount, c),
+    rampHeight: lerpRange(lo.rampHeight, hi.rampHeight, c),
+    waterLen: lerpRange(lo.waterLen, hi.waterLen, c),
+    bridgeLen: lerpRange(lo.bridgeLen, hi.bridgeLen, c),
+  }
+}
+
+/** Hazard palette at ramp progress t: gentle early, unlocking ramps then ice. */
+function endlessHazardsAt(t: number): readonly TerrainKind[] {
+  const kinds: TerrainKind[] = [...ENDLESS_HAZARDS_GENTLE]
+  if (t >= ENDLESS_RAMP_UNLOCK) kinds.push('ramp')
+  if (t >= ENDLESS_ICE_UNLOCK) kinds.push('ice')
+  return kinds
+}
+
+/**
+ * Generate a VERY LONG, distance-ramped endless course.
+ *
+ * DETERMINISTIC: identical `seed` → identical track (seeded PRNG only, no
+ * Math.random / Date). Difficulty is a function of x (the ramp), not a tier.
+ * `finishX` is the far end of the track; Stage E2 treats endless as no-finish —
+ * the timer ends the run — so reaching finishX is not expected, just harmless.
+ */
+export function generateEndlessCourse(opts: { seed: number }): Course {
+  const rng = mulberry32(opts.seed)
+
+  const segments: SegmentDef[] = []
+  const obstacles: Obstacle[] = []
+  let x = X_START
+
+  // Gentle flat start run-in (safe spawn).
+  const start = flatZone(x, ENDLESS_START_FLAT_LEN)
+  segments.push(start.seg)
+  x = start.seg.xEnd
+
+  // Ramped hazard sequence until we reach the target length.
+  while (x - X_START < ENDLESS_TARGET_LENGTH) {
+    const t = (x - X_START) / ENDLESS_RAMP_DISTANCE
+    const p = endlessParamsAt(t)
+    const kind = pick(rng, p.hazards)
+    const built = buildHazard(kind, rng, x, p)
+    segments.push(built.seg)
+    if (built.obstacles) obstacles.push(...built.obstacles)
+    x = built.seg.xEnd
+  }
+
+  // Flat run-out capping the far end.
+  const end = flatZone(x, ENDLESS_END_FLAT_LEN)
+  segments.push(end.seg)
+  x = end.seg.xEnd
+
+  return assembleCourse(segments, obstacles, X_START, x)
+}

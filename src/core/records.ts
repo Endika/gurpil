@@ -187,3 +187,34 @@ export function highestUnlocked(store: KeyValueStore): number {
   }
   return highest
 }
+
+// ─── Endless best distance ───────────────────────────────────────────────────
+//
+// The endless arcade mode (see `core/endless.ts`) keeps a single best-distance
+// record: the furthest the player has EVER travelled. Stored as a bare number
+// string; only ever increases; a missing/corrupt/negative value reads as 0.
+
+const ENDLESS_BEST_KEY = 'gurpil.endless.best'
+
+/**
+ * Load the best endless distance ever recorded. Tolerates a missing key, a
+ * non-numeric value, NaN/Infinity, or a negative value — all fall back to 0.
+ */
+export function loadEndlessBest(store: KeyValueStore): number {
+  const raw = store.get(ENDLESS_BEST_KEY)
+  if (raw === null) return 0
+  const value = Number(raw)
+  if (!Number.isFinite(value) || value < 0) return 0
+  return value
+}
+
+/**
+ * Record an endless run's distance, keeping the MAXIMUM ever seen, and return the
+ * (possibly improved) best. A negative distance is treated as 0. Only improves.
+ */
+export function saveEndlessDistance(store: KeyValueStore, distance: number): number {
+  const candidate = Number.isFinite(distance) && distance > 0 ? distance : 0
+  const best = Math.max(loadEndlessBest(store), candidate)
+  store.set(ENDLESS_BEST_KEY, String(best))
+  return best
+}
