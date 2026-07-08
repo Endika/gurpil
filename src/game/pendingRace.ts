@@ -7,30 +7,29 @@
  * (see `src/render/scene.ts`). Neither owns a teardown path today, so calling
  * the boot sequence a second time in the same page would leak a physics
  * world and stack a second WebGL canvas. Rather than build first-class
- * teardown for both subsystems just for this, "Play again" / "Change
- * difficulty" do a full page reload — the simplest reset already used by the
- * MVP restart flow — but first stash WHERE the next boot should land (start a
- * race directly with a given difficulty+seed, or fall back to the difficulty
- * select screen) in `sessionStorage`. `game.ts` reads and clears that on boot.
+ * teardown for both subsystems just for this, the finish-overlay actions
+ * ("Retry" / "Next level") do a full page reload — the simplest reset already
+ * used by the MVP restart flow — but first stash WHICH campaign LEVEL the next
+ * boot should land on in `sessionStorage`. "Levels" (back to the grid) clears
+ * it. `game.ts` reads and clears that on boot.
  *
  * This module holds only the PURE parse/serialize logic so it is unit
  * testable without touching `sessionStorage`; `game.ts` wraps it with the
  * actual storage read/write (impure, browser-only).
  */
 
-import type { Difficulty } from '../core/course'
+import { CAMPAIGN_SIZE } from '../core/campaign'
 
 export const PENDING_RACE_STORAGE_KEY = 'gurpil.pendingRace'
 
+/** The campaign level a reload should boot directly into (skipping the grid). */
 export interface PendingRace {
-  difficulty: Difficulty
-  seed: number
+  levelNumber: number
 }
 
-const VALID_DIFFICULTIES: readonly Difficulty[] = ['easy', 'medium', 'hard']
-
-function isDifficulty(value: unknown): value is Difficulty {
-  return typeof value === 'string' && (VALID_DIFFICULTIES as readonly string[]).includes(value)
+/** Is `n` a valid 1-based campaign level number (1 … CAMPAIGN_SIZE)? Pure. */
+function isValidLevelNumber(n: unknown): n is number {
+  return typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= CAMPAIGN_SIZE
 }
 
 /** Serialize a pending race to a storage-ready string. Pure. */
@@ -40,8 +39,9 @@ export function serializePendingRace(pending: PendingRace): string {
 
 /**
  * Parse a pending race back from a stored string. Tolerates a missing value,
- * invalid JSON, or a value with the wrong shape — all resolve to `null`
- * (meaning: "no pending race, show the difficulty select screen"). Pure.
+ * invalid JSON, or a value with the wrong shape / an out-of-range level number
+ * — all resolve to `null` (meaning: "no pending race, show the level-select
+ * grid"). Pure.
  */
 export function parsePendingRace(raw: string | null): PendingRace | null {
   if (raw === null) return null
@@ -50,11 +50,10 @@ export function parsePendingRace(raw: string | null): PendingRace | null {
     const parsed: unknown = JSON.parse(raw)
     if (typeof parsed !== 'object' || parsed === null) return null
 
-    const candidate = parsed as { difficulty?: unknown; seed?: unknown }
-    if (!isDifficulty(candidate.difficulty)) return null
-    if (typeof candidate.seed !== 'number' || !Number.isFinite(candidate.seed)) return null
+    const candidate = parsed as { levelNumber?: unknown }
+    if (!isValidLevelNumber(candidate.levelNumber)) return null
 
-    return { difficulty: candidate.difficulty, seed: candidate.seed }
+    return { levelNumber: candidate.levelNumber }
   } catch {
     return null
   }

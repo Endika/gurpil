@@ -7,9 +7,11 @@
  * `showFinish` / `hide` on phase transitions (idle / racing / finished — see
  * core/run.ts), plus `setTarget` once at boot with the course's par time.
  *
- * "Play again" / "Change difficulty" on the finish overlay are wired to the
+ * "Retry" / "Next level" / "Levels" on the finish overlay are wired to the
  * `HudCallbacks` passed to `createHud` — game.ts decides what each does (see
- * src/game/pendingRace.ts for why that's a page reload under the hood).
+ * src/game/pendingRace.ts for why that's a page reload under the hood). The
+ * "Next level" button is only shown when the finished run reports a next level
+ * exists (`FinishResult.hasNextLevel`).
  *
  * All user-facing text comes from `t()` (src/ui/i18n.ts) — no hardcoded copy.
  * Visual styling lives in `src/ui/styles.css` (class names below), imported
@@ -45,19 +47,24 @@ export function speedFraction(speedMps: number): number {
 }
 
 /** The earned result of a finished run, plus the (possibly just-improved)
- *  best record for its difficulty — everything the finish overlay shows. */
+ *  best record for its level — everything the finish overlay shows. */
 export interface FinishResult {
   elapsedMs: number
   medal: Medal
   best: BestRecord
+  /** Whether a next campaign level exists (and is now unlocked). Controls the
+   *  "Next level" button's visibility. */
+  hasNextLevel: boolean
 }
 
-/** Callbacks for the finish overlay's two actions, plus the mute toggle. */
+/** Callbacks for the finish overlay's three actions, plus the mute toggle. */
 export interface HudCallbacks {
-  /** Start a brand-new race at the SAME difficulty (fresh random seed). */
-  onPlayAgain(): void
-  /** Return to the difficulty select screen. */
-  onChangeDifficulty(): void
+  /** Replay the SAME campaign level from the start. */
+  onRetry(): void
+  /** Advance to the next campaign level (only reachable when it exists). */
+  onNextLevel(): void
+  /** Return to the level-select grid. */
+  onLevels(): void
   /** The always-visible mute button was tapped. */
   onToggleMute(): void
 }
@@ -178,25 +185,38 @@ export function createHud(root: HTMLElement, callbacks: HudCallbacks): Hud {
   const buttonRow = document.createElement('div')
   buttonRow.className = 'hud-btn-row'
 
-  const playAgainBtn = document.createElement('button')
-  playAgainBtn.type = 'button'
-  playAgainBtn.className = 'hud-btn hud-btn--primary'
-  playAgainBtn.dataset['hud'] = 'play-again'
-  playAgainBtn.textContent = t('hud.playAgain')
-  playAgainBtn.addEventListener('click', () => {
-    callbacks.onPlayAgain()
+  // "Next level" is primary (the natural progression) but only shown when a
+  // next level exists; visibility is set per-result in `showFinish`.
+  const nextLevelBtn = document.createElement('button')
+  nextLevelBtn.type = 'button'
+  nextLevelBtn.className = 'hud-btn hud-btn--primary'
+  nextLevelBtn.dataset['hud'] = 'next-level'
+  nextLevelBtn.textContent = t('hud.nextLevel')
+  nextLevelBtn.hidden = true
+  nextLevelBtn.addEventListener('click', () => {
+    callbacks.onNextLevel()
   })
-  buttonRow.appendChild(playAgainBtn)
+  buttonRow.appendChild(nextLevelBtn)
 
-  const changeDifficultyBtn = document.createElement('button')
-  changeDifficultyBtn.type = 'button'
-  changeDifficultyBtn.className = 'hud-btn hud-btn--secondary'
-  changeDifficultyBtn.dataset['hud'] = 'change-difficulty'
-  changeDifficultyBtn.textContent = t('hud.changeDifficulty')
-  changeDifficultyBtn.addEventListener('click', () => {
-    callbacks.onChangeDifficulty()
+  const retryBtn = document.createElement('button')
+  retryBtn.type = 'button'
+  retryBtn.className = 'hud-btn hud-btn--secondary'
+  retryBtn.dataset['hud'] = 'retry'
+  retryBtn.textContent = t('hud.retry')
+  retryBtn.addEventListener('click', () => {
+    callbacks.onRetry()
   })
-  buttonRow.appendChild(changeDifficultyBtn)
+  buttonRow.appendChild(retryBtn)
+
+  const levelsBtn = document.createElement('button')
+  levelsBtn.type = 'button'
+  levelsBtn.className = 'hud-btn hud-btn--secondary'
+  levelsBtn.dataset['hud'] = 'levels'
+  levelsBtn.textContent = t('hud.levels')
+  levelsBtn.addEventListener('click', () => {
+    callbacks.onLevels()
+  })
+  buttonRow.appendChild(levelsBtn)
 
   finishOverlay.appendChild(buttonRow)
 
@@ -223,6 +243,7 @@ export function createHud(root: HTMLElement, callbacks: HudCallbacks): Hud {
     showFinish(result: FinishResult): void {
       startOverlay.hidden = true
       finishOverlay.hidden = false
+      nextLevelBtn.hidden = !result.hasNextLevel
       finishTime.textContent = `${t('hud.time')}: ${formatTime(result.elapsedMs)}`
 
       finishMedal.textContent = `${t('hud.medal')}: ${t(medalMessageKey(result.medal))}`

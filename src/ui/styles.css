@@ -265,7 +265,7 @@
   box-shadow: none;
 }
 
-/* ─── Difficulty select screen ───────────────────────────────────────────── */
+/* ─── Level select screen ────────────────────────────────────────────────── */
 
 .select-overlay {
   position: fixed;
@@ -275,7 +275,6 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: 1.5rem;
 
   padding: calc(1.5rem + var(--gurpil-safe-top)) calc(1.5rem + var(--gurpil-safe-right))
@@ -285,6 +284,12 @@
   color: var(--gurpil-ink);
   font-family: var(--gurpil-font);
   text-align: center;
+}
+
+/* The campaign grid can exceed the viewport — let the overlay scroll. */
+.level-select-overlay {
+  justify-content: flex-start;
+  overflow-y: auto;
 }
 
 .select-title {
@@ -297,65 +302,75 @@
   color: transparent;
 }
 
-.select-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  width: min(90vw, 22rem);
+.level-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr));
+  gap: 0.85rem;
+  width: min(92vw, 30rem);
 }
 
-.select-card {
+.level-card {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.3rem;
+  justify-content: center;
+  gap: 0.2rem;
 
-  min-height: 4.5rem;
-  padding: 1rem 1.5rem;
+  aspect-ratio: 1;
+  padding: 0.6rem;
 
   font-family: var(--gurpil-font);
   color: var(--gurpil-ink);
 
-  border: none;
-  border-radius: 18px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-radius: 16px;
+  /* Per-card tint (theme skyHorizon), set inline as --level-tint. */
+  background: linear-gradient(150deg, var(--level-tint, var(--gurpil-teal)), rgba(15, 15, 30, 0.55));
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
 
   cursor: pointer;
   touch-action: manipulation;
   transition: transform 0.1s ease;
 }
 
-.select-card:active {
-  transform: scale(0.97);
+.level-card:active {
+  transform: scale(0.96);
 }
 
-.select-card--easy {
-  background: linear-gradient(135deg, var(--gurpil-mint), var(--gurpil-teal));
+.level-card--locked {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
-.select-card--medium {
-  background: linear-gradient(135deg, var(--gurpil-yellow), var(--gurpil-mint));
-}
-
-.select-card--hard {
-  background: linear-gradient(135deg, var(--gurpil-coral), var(--gurpil-yellow));
-}
-
-.select-card-name {
-  font-size: clamp(1.2rem, 5.5vw, 1.5rem);
+.level-card-number {
+  font-size: clamp(1.3rem, 6vw, 1.7rem);
   font-weight: 800;
-  color: var(--gurpil-bg);
+  line-height: 1;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
 }
 
-.select-card-best {
-  font-size: clamp(0.85rem, 3.6vw, 1rem);
-  font-variant-numeric: tabular-nums;
-  color: rgba(15, 15, 30, 0.75);
+.level-card-lock {
+  font-size: clamp(1.1rem, 5vw, 1.4rem);
 }
 
-.select-card-medal {
-  font-size: clamp(0.8rem, 3.4vw, 0.95rem);
+.level-card-theme {
+  font-size: clamp(0.62rem, 2.8vw, 0.78rem);
+  font-weight: 600;
+  opacity: 0.95;
+}
+
+.level-card-medal {
+  font-size: clamp(0.6rem, 2.7vw, 0.75rem);
   font-weight: 700;
+}
+
+.level-card-best {
+  font-size: clamp(0.58rem, 2.6vw, 0.72rem);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.9;
 }
 
 /* ─── Draw-box (component created in src/ui/drawBox.ts) ─────────────────── */

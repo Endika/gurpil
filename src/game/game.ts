@@ -1,50 +1,52 @@
 /**
  * Game orchestrator — wires all subsystems into a playable end-to-end loop.
  *
- * Flow (Stage C — procedural levels UI):
- *   boot → [pending race from a reload?]
- *     ├─ yes → build & run that race directly (skips the select screen)
- *     └─ no  → show the DIFFICULTY SELECT screen (src/ui/difficultySelect.ts)
- *              → player picks a difficulty → generate a fresh random seed
- *              → build & run the race
- *   race → build course (generateCourse) → physics world → vehicle → scene
- *        → HUD → "first drawn shape starts the race" (unchanged) → race
- *        → on finish: grade the medal, persist the best record, show the
- *          finish overlay with "Play again" / "Change difficulty".
+ * Flow (Stage 2b — campaign):
+ *   boot → [pending level from a reload?]
+ *     ├─ yes → build & run that campaign level directly (skips the grid)
+ *     └─ no  → show the LEVEL-SELECT grid (src/ui/levelSelect.ts)
+ *              → player taps an unlocked level N
+ *              → build & run that level
+ *   level → look up `levelByNumber(N)` (fixed difficulty + seed + theme)
+ *         → generateCourse({difficulty, seed}) → physics world → vehicle
+ *         → scene (THEMES[level.themeId]) → HUD → "first drawn shape starts the
+ *           race" (unchanged) → race
+ *         → on finish: grade the medal, persist the per-level best (which
+ *           unlocks N+1), show the finish overlay with Retry / Next level /
+ *           Levels.
  *
  * Responsibilities:
  *   - Boot: see flow above.
  *   - Time: `performance.now()` lives HERE (not in core/run.ts which is pure).
- *   - Randomness: `randomSeed()` lives HERE — core/course.ts is pure and takes
- *     a seed as input; only the app layer may call Math.random()/Date.now().
+ *   - Determinism: every level's course seed and theme come from the campaign
+ *     (core/campaign.ts) — pure data. The app layer no longer rolls a random
+ *     seed for gameplay; a given level number always yields the same track+look.
  *   - Input: draw-box `onShape` → `vehicle.swapShape(id)`.
  *            "First drawn shape starts the race" — the run stays idle until the
  *            player lifts their finger for the first time; that first shape
  *            classification both equips the vehicle AND calls `startRun`.
  *   - Loop: rAF + fixed-step physics accumulator (via loop.ts).
- *            While racing: full auto-throttle forward (setThrottle(1) + applyDrive()).
- *            On finish: throttle cut to 0, timer frozen, medal graded once,
- *            best record persisted once, finish overlay shown every frame after.
  *   - HUD: timer/target readout + start/finish overlays, built by `createHud`
- *          (src/ui/hud.ts). All copy comes from i18n (src/ui/i18n.ts) — see
- *          also main.ts for the styles.css import.
+ *          (src/ui/hud.ts). All copy comes from i18n (src/ui/i18n.ts).
  *
- * Restart strategy: "Play again" and "Change difficulty" both do a full page
- * reload (`location.reload()`) — see `src/game/pendingRace.ts` for why (the
+ * Restart strategy: Retry / Next level do a full page reload
+ * (`location.reload()`) — see `src/game/pendingRace.ts` for why (the
  * renderer/physics world have no teardown path today) and how the intended
- * next state (a specific race, or the select screen) survives the reload.
+ * next level survives the reload. "Levels" clears the pending level and
+ * reloads to the grid.
  */
 
-import { generateCourse, type Difficulty } from '../core/course'
-import { pickTheme, THEMES } from '../core/theme'
+import { generateCourse } from '../core/course'
+import { THEMES } from '../core/theme'
 import { parTimeMs, medalFor, type Medal } from '../core/medal'
-import { saveResult, type Record as BestRecord } from '../core/records'
+import { saveLevelResult, type Record as BestRecord } from '../core/records'
+import { levelByNumber, CAMPAIGN_SIZE, type Level } from '../core/campaign'
 import { createWorld, PHYSICS_TIMESTEP } from '../physics/world'
 import { createVehicle } from '../physics/vehicle'
 import { createScene } from '../render/scene'
 import { createDrawBox } from '../ui/drawBox'
 import { createHud, speedFraction } from '../ui/hud'
-import { createDifficultySelect } from '../ui/difficultySelect'
+import { createLevelSelect } from '../ui/levelSelect'
 import { createLocalStorageStore } from '../ui/localStorageStore'
 import { createAudio, type Audio } from '../audio/audio'
 import { createRun, startRun, tickRun } from '../core/run'
@@ -69,23 +71,13 @@ const STEP_MS = PHYSICS_TIMESTEP * 1000
  */
 const SETTLE_STEPS = 90
 
-/** Upper bound (exclusive) for a generated seed — fits in an unsigned 32-bit int. */
-const SEED_SPACE = 2 ** 32
-
-// ─── Randomness (app layer only — core stays pure) ─────────────────────────────
-
-/** A fresh random seed for `generateCourse`. Impure — never called from core. */
-function randomSeed(): number {
-  return (Date.now() ^ Math.floor(Math.random() * SEED_SPACE)) >>> 0
-}
-
-// ─── Pending-race handoff (sessionStorage-backed; see pendingRace.ts) ──────────
+// ─── Pending-level handoff (sessionStorage-backed; see pendingRace.ts) ─────────
 
 function readPendingRace(): PendingRace | null {
   try {
     return parsePendingRace(sessionStorage.getItem(PENDING_RACE_STORAGE_KEY))
   } catch {
-    // Storage unavailable (e.g. private mode edge cases) — fall back to select.
+    // Storage unavailable (e.g. private mode edge cases) — fall back to grid.
     return null
   }
 }
@@ -98,7 +90,7 @@ function writePendingRace(pending: PendingRace | null): void {
       sessionStorage.setItem(PENDING_RACE_STORAGE_KEY, serializePendingRace(pending))
     }
   } catch {
-    // Storage unavailable — the reload will just land on the select screen.
+    // Storage unavailable — the reload will just land on the level-select grid.
   }
 }
 
@@ -115,36 +107,41 @@ export async function startGame(root: HTMLElement): Promise<void> {
   const pending = readPendingRace()
   if (pending !== null) {
     writePendingRace(null)
-    await runRace(root, store, audio, pending.difficulty, pending.seed)
-    return
+    const level = levelByNumber(pending.levelNumber)
+    if (level !== undefined) {
+      await runLevel(root, store, audio, level)
+      return
+    }
+    // Out-of-range level (shouldn't happen — parse validates) → fall to grid.
   }
 
-  showSelect(root, store, audio)
+  showLevelSelect(root, store, audio)
 }
 
-/** Show the difficulty select screen; picking a card starts a fresh race. */
-function showSelect(root: HTMLElement, store: KeyValueStore, audio: Audio): void {
-  const select = createDifficultySelect(root, {
+/** Show the level-select grid; tapping an unlocked level starts it. */
+function showLevelSelect(root: HTMLElement, store: KeyValueStore, audio: Audio): void {
+  const select = createLevelSelect(root, {
     store,
-    onSelect: (difficulty) => {
+    onSelect: (levelNumber) => {
+      const level = levelByNumber(levelNumber)
+      if (level === undefined) return
       select.destroy()
-      runRace(root, store, audio, difficulty, randomSeed()).catch((err: unknown) => {
-        console.error('[gurpil] race failed to start', err)
+      runLevel(root, store, audio, level).catch((err: unknown) => {
+        console.error('[gurpil] level failed to start', err)
       })
     },
   })
 }
 
-/** Build and run a single race (one generated course) to completion. */
-async function runRace(
+/** Build and run a single campaign level to completion. */
+async function runLevel(
   root: HTMLElement,
   store: KeyValueStore,
   audio: Audio,
-  difficulty: Difficulty,
-  seed: number,
+  level: Level,
 ): Promise<void> {
   // ── Build subsystems ──────────────────────────────────────────────────────
-  const course = generateCourse({ difficulty, seed })
+  const course = generateCourse({ difficulty: level.difficulty, seed: level.seed })
   const parMs = parTimeMs(course)
   const world = await createWorld(course)
 
@@ -156,19 +153,25 @@ async function runRace(
     world.step()
   }
 
-  // Pick the visual theme (biome) from the SAME seed as the course, so a given
-  // seed always yields the same track AND the same world look (reproducible).
-  // Purely visual — no effect on physics/gameplay.
-  const themeId = pickTheme(seed)
-  const scene = createScene(course, THEMES[themeId])
+  // Theme is the level's fixed biome (campaign data) — purely visual, no effect
+  // on physics/gameplay.
+  const theme = THEMES[level.themeId]
+  const scene = createScene(course, theme)
+
+  // Whether there is a further level to advance to after beating this one.
+  const hasNextLevel = level.number < CAMPAIGN_SIZE
 
   // ── HUD ───────────────────────────────────────────────────────────────────
   const hud = createHud(root, {
-    onPlayAgain: () => {
-      writePendingRace({ difficulty, seed: randomSeed() })
+    onRetry: () => {
+      writePendingRace({ levelNumber: level.number })
       location.reload()
     },
-    onChangeDifficulty: () => {
+    onNextLevel: () => {
+      writePendingRace({ levelNumber: level.number + 1 })
+      location.reload()
+    },
+    onLevels: () => {
       writePendingRace(null)
       location.reload()
     },
@@ -257,11 +260,16 @@ async function runRace(
       // finished — grade + persist once, then just keep showing the result.
       if (finishResult === null) {
         const medal = medalFor(run.elapsedMs, parMs)
-        const best = saveResult(store, difficulty, run.elapsedMs, medal)
+        const best = saveLevelResult(store, level.number, run.elapsedMs, medal)
         finishResult = { medal, best }
         audio.finish(medal)
       }
-      hud.showFinish({ elapsedMs: run.elapsedMs, medal: finishResult.medal, best: finishResult.best })
+      hud.showFinish({
+        elapsedMs: run.elapsedMs,
+        medal: finishResult.medal,
+        best: finishResult.best,
+        hasNextLevel,
+      })
       audio.setEngine(0)
     }
 
@@ -274,5 +282,8 @@ async function runRace(
 
   requestAnimationFrame(frame)
 
-  console.log(`[gurpil] race started — difficulty=${difficulty} seed=${seed} theme=${themeId}`)
+  console.log(
+    `[gurpil] level ${level.number} started — difficulty=${level.difficulty} ` +
+      `seed=${level.seed} theme=${level.themeId}`,
+  )
 }
