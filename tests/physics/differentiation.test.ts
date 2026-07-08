@@ -15,11 +15,12 @@
  *   - EGGS   : the `line` (largest effective radius) covers the egg stretch far
  *              better than the `circle`. The circle no longer permanently stalls
  *              — it just makes less progress in the same window.
- *   - SLOPE  : on the ACTUAL course uphill the grip difference is real — driving
- *              from the base of the ramp, the grippy `triangle` climbs clearly
- *              further than the low-grip `circle`, which slips and crawls. This is
- *              the fix for the "el círculo no sufre penalizaciones en las cuestas"
- *              playtest report: the drawn shape now MATTERS on the hill.
+ *   - SLOPE  : on the ACTUAL course uphill the grip difference is a hard GATE —
+ *              driving from the base of the slippery ramp, the grippy `triangle`
+ *              grips and climbs the slope while the low-grip `circle` slips, gains
+ *              no real height and slides back down. This is the fix for the "no
+ *              veo que en las cuestas el círculo se penalice" playtest report: the
+ *              drawn shape is now UNMISTAKABLE on the hill (pass/fail, like eggs).
  */
 
 import { describe, it, expect, beforeAll } from 'vitest'
@@ -109,23 +110,27 @@ describe('SLOPE differentiation (actual course uphill)', () => {
 
   /**
    * Minimum net-x margin (metres) by which the grippy triangle must out-climb
-   * the slipping circle over CLIMB_STEPS. Measured margin ≈ 6.3 m (triangle
-   * ≈ 14.3, circle ≈ 7.9 — the triangle climbs ~80 % further); we assert a
-   * comfortable, non-tautological fraction of it.
+   * the slipping circle over CLIMB_STEPS. Measured margin ≈ 16 m (triangle
+   * dx ≈ +15, circle dx ≈ −2 as it slips back); we assert a comfortable,
+   * non-tautological fraction of it.
    */
-  const MIN_UPHILL_MARGIN = 4
+  const MIN_UPHILL_MARGIN = 8
 
-  it('grippy triangle climbs the uphill clearly further than the slipping circle', async () => {
+  /** Minimum HEIGHT (m) the grippy triangle must gain climbing the ramp. */
+  const MIN_TRIANGLE_HEIGHT = 5
+  /** The slipping circle must NOT gain real height (it slips / slides back). */
+  const MAX_CIRCLE_HEIGHT = 3
+
+  it('grippy triangle climbs the uphill while the low-grip circle slips and slides back', async () => {
     const circle = await runOnCourse('circle', UPHILL_BASE, 1, CLIMB_STEPS)
     const triangle = await runOnCourse('triangle', UPHILL_BASE, 1, CLIMB_STEPS)
 
-    // The low-grip circle is PENALISED on the hill but never stuck: it still
-    // crawls forward (positive net progress up the ramp).
-    expect(circle.dx, 'circle should still crawl up (not stuck)').toBeGreaterThan(0)
     // The grippy triangle grips the slope and climbs markedly further than the
-    // slipping circle — the drawn shape now matters uphill (real margin).
+    // slipping circle — the drawn shape is a hard gate uphill (real margin).
     expect(triangle.dx).toBeGreaterThan(circle.dx + MIN_UPHILL_MARGIN)
-    // And it also gains more HEIGHT, not just distance along a flatter path.
+    // The triangle gains real HEIGHT; the circle slips and gains none (slides back).
+    expect(triangle.finalY).toBeGreaterThan(MIN_TRIANGLE_HEIGHT)
+    expect(circle.finalY).toBeLessThan(MAX_CIRCLE_HEIGHT)
     expect(triangle.finalY).toBeGreaterThan(circle.finalY)
   })
 })

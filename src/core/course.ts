@@ -132,6 +132,35 @@ const FRICTION_MUD = 1.2
 /** Friction in the ice zone (low grip). */
 const FRICTION_ICE = 0.15
 
+/**
+ * Friction of the UPHILL ramp SURFACE — deliberately slippery (the "triangle /
+ * square gate", mirroring the "eggs → line" gate).
+ *
+ * Playtest: "no veo que en las cuestas el círculo se penalice" — the previous
+ * gentle slope penalty (just making the low-grip circle a bit slower uphill) was
+ * imperceptible in a single auto-throttle run. Fix: make GRIP the binding
+ * constraint on the ramp so the drawn shape is felt as a hard pass/fail, exactly
+ * like the eggs require the line.
+ *
+ * Rapier combines the two contacting frictions with the default AVERAGE rule, so
+ * the effective grip on the ramp is (wheelFriction + FRICTION_UPHILL) / 2:
+ *   - circle   (0.55): (0.55 + 0.1)/2 = 0.325  < tan(26.6°)=0.50 → SLIPS: the
+ *     wheel spins, transmits no traction, gravity wins and the car slides back
+ *     down to the flat base. It CANNOT summit on the circle.
+ *   - square   (1.1) : (1.1  + 0.1)/2 = 0.60   > 0.50 → grips and climbs.
+ *   - triangle (1.3) : (1.3  + 0.1)/2 = 0.70   > 0.50 → grips and climbs easily.
+ *
+ * This is LOCALISED to the ramp x-range [X_ROCKY_END, X_UPHILL_END): it does not
+ * touch flat driving, from-rest-on-flat settling, or the swap anti-pop scenarios
+ * (all on FRICTION_BASE terrain) — those broke previously when the CIRCLE'S
+ * COLLIDER friction was lowered globally. Verified against the real-engine slope
+ * sweep: at this grade + surface friction the circle plateaus ~6 m up the ramp
+ * (maxX ≈ 56, ramp top = 90) then slides back to x ≈ 50, while the triangle and
+ * square summit and reach the finish. The slip is fully recoverable: swapping to
+ * a triangle at the ramp lets the run continue (no dead-end, no reload).
+ */
+const FRICTION_UPHILL = 0.1
+
 // ─── Egg obstacle constants ───────────────────────────────────────────────────
 
 /** x positions (absolute) of egg obstacles within the eggs stretch. */
@@ -193,7 +222,7 @@ const SEGMENTS: SegmentDef[] = [
     kind: 'uphill',
     xStart: X_ROCKY_END,
     xEnd: X_UPHILL_END,
-    friction: FRICTION_BASE,
+    friction: FRICTION_UPHILL,
     y: uphillY,
   },
   {
