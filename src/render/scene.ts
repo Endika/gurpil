@@ -31,8 +31,25 @@ import { wheelGeometry, WHEEL_VISUAL_RADIUS } from './wheelMesh'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-/** Half-height of the orthographic frustum in game metres. Controls zoom level. */
+/** Minimum vertical half-extent the camera always shows (game metres). */
 const CAM_HALF_HEIGHT = 12
+
+/**
+ * Minimum horizontal half-extent the camera always shows (game metres) — the
+ * "track ahead" budget. In portrait (narrow) the frustum is grown vertically so
+ * this much width is still visible; in landscape the height minimum dominates.
+ * This keeps the side-scroller playable in any orientation.
+ */
+const CAM_HALF_WIDTH = 15
+
+/**
+ * Compute the orthographic half-extents for a viewport aspect (w/h) so that
+ * BOTH minimums (CAM_HALF_WIDTH, CAM_HALF_HEIGHT) are always satisfied.
+ */
+function frustumHalfExtents(aspect: number): { halfW: number; halfH: number } {
+  const halfH = Math.max(CAM_HALF_HEIGHT, CAM_HALF_WIDTH / aspect)
+  return { halfW: halfH * aspect, halfH }
+}
 
 /** z distance of the camera from the x-y plane (orthographic depth budget). */
 const CAM_Z = 50
@@ -420,8 +437,7 @@ export function createScene(course: Course): Scene3D {
 
   // ── Camera ──────────────────────────────────────────────────────────────────
   const aspect = window.innerWidth / window.innerHeight
-  const halfH = CAM_HALF_HEIGHT
-  const halfW = halfH * aspect
+  const { halfW, halfH } = frustumHalfExtents(aspect)
   const camera = new THREE.OrthographicCamera(-halfW, halfW, halfH, -halfH, 0.1, 200)
   camera.position.set(0, CAM_Y_OFFSET, CAM_Z)
   camera.lookAt(0, CAM_Y_OFFSET, 0)
@@ -449,12 +465,11 @@ export function createScene(course: Course): Scene3D {
   window.addEventListener('resize', () => {
     const w = window.innerWidth
     const h = window.innerHeight
-    const asp = w / h
-    const hw = CAM_HALF_HEIGHT * asp
+    const { halfW: hw, halfH: hh } = frustumHalfExtents(w / h)
     camera.left = -hw
     camera.right = hw
-    camera.top = CAM_HALF_HEIGHT
-    camera.bottom = -CAM_HALF_HEIGHT
+    camera.top = hh
+    camera.bottom = -hh
     camera.updateProjectionMatrix()
     renderer.setSize(w, h)
   })

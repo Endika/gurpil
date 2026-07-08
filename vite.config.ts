@@ -14,7 +14,7 @@ export default defineConfig({
         theme_color: "#1a1a2e",
         background_color: "#0d0d1a",
         display: "standalone",
-        orientation: "landscape",
+        orientation: "portrait",
         start_url: "/gurpil/",
         icons: [
           {
