@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.7.0](https://github.com/Endika/gurpil/compare/v0.6.2...v0.7.0) (2026-07-08)
+
+
+### Features
+
+* **core:** endless mode core (timer, checkpoints, ramping course) ([2609fae](https://github.com/Endika/gurpil/commit/2609fae80fe8ac601f85cb0e0c9722db34a605cb))
+* **game:** wire endless mode game loop ([8a83b6c](https://github.com/Endika/gurpil/commit/8a83b6c05f8ba9073cc7c7fcc3c4fb2230ea5674))
+* **ui:** endless HUD, game-over overlay and level-select entry ([0458d2c](https://github.com/Endika/gurpil/commit/0458d2c6513b0ceca9589b3388e180a3493a5ea8))
+
 ## [0.6.2](https://github.com/Endika/gurpil/compare/v0.6.1...v0.6.2) (2026-07-08)
 
 
