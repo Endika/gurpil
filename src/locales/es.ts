@@ -25,4 +25,6 @@ export const es: Messages = {
   'hud.playAgain': 'Jugar de nuevo',
   'hud.changeDifficulty': 'Cambiar dificultad',
   'hud.target': 'Objetivo',
+  'hud.mute': 'Silenciar',
+  'hud.unmute': 'Activar sonido',
 }

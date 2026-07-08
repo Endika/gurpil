@@ -25,4 +25,6 @@ export const eu: Messages = {
   'hud.playAgain': 'Berriz jokatu',
   'hud.changeDifficulty': 'Aldatu zailtasuna',
   'hud.target': 'Helburua',
+  'hud.mute': 'Mututu',
+  'hud.unmute': 'Soinua aktibatu',
 }

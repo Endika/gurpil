@@ -42,9 +42,10 @@ import { createWorld, PHYSICS_TIMESTEP } from '../physics/world'
 import { createVehicle } from '../physics/vehicle'
 import { createScene } from '../render/scene'
 import { createDrawBox } from '../ui/drawBox'
-import { createHud } from '../ui/hud'
+import { createHud, speedFraction } from '../ui/hud'
 import { createDifficultySelect } from '../ui/difficultySelect'
 import { createLocalStorageStore } from '../ui/localStorageStore'
+import { createAudio, type Audio } from '../audio/audio'
 import { createRun, startRun, tickRun } from '../core/run'
 import { advanceAccumulator, MAX_STEPS_PER_FRAME } from './loop'
 import {
@@ -108,24 +109,25 @@ function writePendingRace(pending: PendingRace | null): void {
  */
 export async function startGame(root: HTMLElement): Promise<void> {
   const store = createLocalStorageStore()
+  const audio = createAudio()
 
   const pending = readPendingRace()
   if (pending !== null) {
     writePendingRace(null)
-    await runRace(root, store, pending.difficulty, pending.seed)
+    await runRace(root, store, audio, pending.difficulty, pending.seed)
     return
   }
 
-  showSelect(root, store)
+  showSelect(root, store, audio)
 }
 
 /** Show the difficulty select screen; picking a card starts a fresh race. */
-function showSelect(root: HTMLElement, store: KeyValueStore): void {
+function showSelect(root: HTMLElement, store: KeyValueStore, audio: Audio): void {
   const select = createDifficultySelect(root, {
     store,
     onSelect: (difficulty) => {
       select.destroy()
-      runRace(root, store, difficulty, randomSeed()).catch((err: unknown) => {
+      runRace(root, store, audio, difficulty, randomSeed()).catch((err: unknown) => {
         console.error('[gurpil] race failed to start', err)
       })
     },
@@ -136,6 +138,7 @@ function showSelect(root: HTMLElement, store: KeyValueStore): void {
 async function runRace(
   root: HTMLElement,
   store: KeyValueStore,
+  audio: Audio,
   difficulty: Difficulty,
   seed: number,
 ): Promise<void> {
@@ -164,8 +167,14 @@ async function runRace(
       writePendingRace(null)
       location.reload()
     },
+    onToggleMute: () => {
+      const nextMuted = !audio.isMuted()
+      audio.setMuted(nextMuted)
+      hud.setMuted(nextMuted)
+    },
   })
   hud.setTarget(parMs)
+  hud.setMuted(audio.isMuted())
 
   // ── Run state ─────────────────────────────────────────────────────────────
   let run: RunState = createRun()
@@ -176,6 +185,11 @@ async function runRace(
 
   // ── Draw-box ──────────────────────────────────────────────────────────────
   const drawBox = createDrawBox((id) => {
+    // The first draw is the first reliable user gesture in the race flow —
+    // unlock the AudioContext here (browsers block audio before a gesture).
+    audio.unlock()
+    audio.blip()
+
     vehicle.swapShape(id)
 
     // "First draw starts the race": the run is idle until the player draws for
@@ -225,20 +239,25 @@ async function runRace(
     }
 
     // ── HUD update ───────────────────────────────────────────────────────
+    const speedMps = vehicle.chassis.linvel().x
     hud.setTime(run.elapsedMs)
-    hud.setSpeed(vehicle.chassis.linvel().x)
+    hud.setSpeed(speedMps)
     if (run.phase === 'idle') {
       hud.showStart()
+      audio.setEngine(0)
     } else if (run.phase === 'racing') {
       hud.hide()
+      audio.setEngine(speedFraction(speedMps))
     } else {
       // finished — grade + persist once, then just keep showing the result.
       if (finishResult === null) {
         const medal = medalFor(run.elapsedMs, parMs)
         const best = saveResult(store, difficulty, run.elapsedMs, medal)
         finishResult = { medal, best }
+        audio.finish(medal)
       }
       hud.showFinish({ elapsedMs: run.elapsedMs, medal: finishResult.medal, best: finishResult.best })
+      audio.setEngine(0)
     }
 
     // ── Render ───────────────────────────────────────────────────────────

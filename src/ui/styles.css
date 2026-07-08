@@ -106,6 +106,38 @@
   transition: height 0.1s linear;
 }
 
+/* ─── Mute button (top-right, always visible) ────────────────────────────── */
+
+.hud-mute-btn {
+  position: fixed;
+  top: calc(0.75rem + var(--gurpil-safe-top));
+  right: calc(0.75rem + var(--gurpil-safe-right));
+  z-index: 210;
+
+  width: 2.75rem;
+  height: 2.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  font-size: 1.3rem;
+  line-height: 1;
+
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--gurpil-ink);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 0.1s ease;
+}
+
+.hud-mute-btn:active {
+  transform: scale(0.92);
+}
+
 .hud-overlay {
   position: fixed;
   inset: 0;

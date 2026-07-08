@@ -52,13 +52,20 @@ export interface FinishResult {
   best: BestRecord
 }
 
-/** Callbacks for the finish overlay's two actions. */
+/** Callbacks for the finish overlay's two actions, plus the mute toggle. */
 export interface HudCallbacks {
   /** Start a brand-new race at the SAME difficulty (fresh random seed). */
   onPlayAgain(): void
   /** Return to the difficulty select screen. */
   onChangeDifficulty(): void
+  /** The always-visible mute button was tapped. */
+  onToggleMute(): void
 }
+
+/** Icon glyphs for the mute button (visual only — the accessible label comes
+ *  from i18n via `hud.mute` / `hud.unmute`). */
+const MUTE_ICON_MUTED = '🔇'
+const MUTE_ICON_UNMUTED = '🔊'
 
 // ─── Public API ─────────────────────────────────────────────────────────────
 
@@ -75,6 +82,8 @@ export interface Hud {
   showFinish(result: FinishResult): void
   /** Hide both overlays (used while racing). */
   hide(): void
+  /** Reflect the current mute state on the always-visible mute button. */
+  setMuted(muted: boolean): void
 }
 
 /**
@@ -113,6 +122,18 @@ export function createHud(root: HTMLElement, callbacks: HudCallbacks): Hud {
   gaugeFill.className = 'hud-gauge-fill'
   gauge.appendChild(gaugeFill)
   root.appendChild(gauge)
+
+  // ── Mute button (always visible, top-right, safe-area aware) ─────────────
+  const muteBtn = document.createElement('button')
+  muteBtn.type = 'button'
+  muteBtn.className = 'hud-mute-btn'
+  muteBtn.dataset['hud'] = 'mute'
+  muteBtn.textContent = MUTE_ICON_UNMUTED
+  muteBtn.setAttribute('aria-label', t('hud.mute'))
+  muteBtn.addEventListener('click', () => {
+    callbacks.onToggleMute()
+  })
+  root.appendChild(muteBtn)
 
   // ── Start overlay ─────────────────────────────────────────────────────────
   const startOverlay = document.createElement('div')
@@ -217,6 +238,10 @@ export function createHud(root: HTMLElement, callbacks: HudCallbacks): Hud {
     hide(): void {
       startOverlay.hidden = true
       finishOverlay.hidden = true
+    },
+    setMuted(muted: boolean): void {
+      muteBtn.textContent = muted ? MUTE_ICON_MUTED : MUTE_ICON_UNMUTED
+      muteBtn.setAttribute('aria-label', t(muted ? 'hud.unmute' : 'hud.mute'))
     },
   }
 }

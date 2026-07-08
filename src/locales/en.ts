@@ -29,6 +29,8 @@ export const en = {
   'hud.playAgain': 'Play again',
   'hud.changeDifficulty': 'Change difficulty',
   'hud.target': 'Target',
+  'hud.mute': 'Mute',
+  'hud.unmute': 'Unmute',
 } as const satisfies Record<string, string>
 
 /** Union of every valid message key, derived from the English source. */
