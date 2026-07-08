@@ -36,6 +36,10 @@ export const en = {
   'hud.target': 'Target',
   'hud.mute': 'Mute',
   'hud.unmute': 'Unmute',
+  'endless.name': 'Endless',
+  'endless.lockedHint': 'Complete the campaign',
+  'endless.distance': 'Distance',
+  'endless.gameOver': "Time's up!",
 } as const satisfies Record<string, string>
 
 /** Union of every valid message key, derived from the English source. */

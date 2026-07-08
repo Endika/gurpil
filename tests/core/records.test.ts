@@ -10,6 +10,7 @@ import {
   highestUnlocked,
   loadEndlessBest,
   saveEndlessDistance,
+  isEndlessUnlocked,
   type KeyValueStore,
 } from '../../src/core/records'
 import { CAMPAIGN_SIZE } from '../../src/core/campaign'
@@ -299,5 +300,29 @@ describe('loadEndlessBest / saveEndlessDistance', () => {
     saveResult(store, 'easy', 5000, 'gold')
     saveLevelResult(store, 1, 5000, 'gold')
     expect(loadEndlessBest(store)).toBe(0)
+  })
+})
+
+describe('isEndlessUnlocked', () => {
+  it('is locked on a fresh store', () => {
+    expect(isEndlessUnlocked(createMemoryStore())).toBe(false)
+  })
+
+  it('stays locked while the final level is unbeaten (even most beaten)', () => {
+    const store = createMemoryStore()
+    for (let n = 1; n < CAMPAIGN_SIZE; n++) saveLevelResult(store, n, 5000, 'gold')
+    expect(isEndlessUnlocked(store)).toBe(false)
+  })
+
+  it('unlocks once the final level is beaten (any finish, even no medal)', () => {
+    const store = createMemoryStore()
+    saveLevelResult(store, CAMPAIGN_SIZE, 20000, 'none')
+    expect(isEndlessUnlocked(store)).toBe(true)
+  })
+
+  it('treats corrupt final-level storage as not-beaten (stays locked)', () => {
+    const store = createMemoryStore()
+    store.set(`gurpil.levelRecord.${CAMPAIGN_SIZE}`, 'not json{{{')
+    expect(isEndlessUnlocked(store)).toBe(false)
   })
 })

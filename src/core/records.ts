@@ -218,3 +218,12 @@ export function saveEndlessDistance(store: KeyValueStore, distance: number): num
   store.set(ENDLESS_BEST_KEY, String(best))
   return best
 }
+
+/**
+ * Is the endless arcade mode unlocked? It unlocks once the WHOLE campaign is
+ * complete — i.e. the final level (`CAMPAIGN_SIZE`) has been beaten (has a
+ * recorded finish). Corrupt/missing storage reads as not-beaten → still locked.
+ */
+export function isEndlessUnlocked(store: KeyValueStore): boolean {
+  return isLevelBeaten(store, CAMPAIGN_SIZE)
+}

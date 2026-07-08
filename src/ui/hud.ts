@@ -28,6 +28,13 @@ import { medalColorVar, medalMessageKey } from './medalDisplay'
 /** Number of decimal digits shown in the elapsed-time readout. */
 const TIME_DECIMALS = 3
 
+/** Number of decimal digits shown in the endless countdown readout. */
+const COUNTDOWN_DECIMALS = 1
+
+/** Unit symbol for the endless distance readout (metres — a unit, not prose,
+ *  mirroring the hardcoded "s" seconds symbol in `formatTime`). */
+const DISTANCE_UNIT = 'm'
+
 /**
  * Forward speed (m/s) mapped to a full speed gauge. Roughly the circle's top
  * speed on flat ground (MAX_MOTOR_SPEED × wheel radius); the gauge saturates
@@ -57,9 +64,19 @@ export interface FinishResult {
   hasNextLevel: boolean
 }
 
-/** Callbacks for the finish overlay's three actions, plus the mute toggle. */
+/** The result an endless run ends on — everything the game-over overlay shows. */
+export interface EndlessOverResult {
+  /** Distance travelled this run (metres). */
+  distance: number
+  /** Best endless distance ever recorded (metres, possibly just improved). */
+  best: number
+}
+
+/** Callbacks for the finish overlay's actions, plus the mute toggle.
+ *  The endless GAME-OVER overlay REUSES `onRetry` (start a fresh endless run)
+ *  and `onLevels` (back to the grid) — game.ts binds each per run mode. */
 export interface HudCallbacks {
-  /** Replay the SAME campaign level from the start. */
+  /** Campaign: replay the SAME level. Endless: start a FRESH run. */
   onRetry(): void
   /** Advance to the next campaign level (only reachable when it exists). */
   onNextLevel(): void
@@ -83,11 +100,15 @@ export interface Hud {
   setSpeed(speedMps: number): void
   /** Set the subtle "target" (par time) readout shown next to the timer. */
   setTarget(ms: number): void
-  /** Show the idle "draw to start" overlay (hides the finish overlay). */
+  /** ENDLESS: update the top readout to a COUNTDOWN + travelled DISTANCE. */
+  setEndless(timeLeftMs: number, distance: number): void
+  /** Show the idle "draw to start" overlay (hides the other overlays). */
   showStart(): void
   /** Show the finish overlay with the run's result + best record. */
   showFinish(result: FinishResult): void
-  /** Hide both overlays (used while racing). */
+  /** ENDLESS: show the game-over overlay (Retry / Levels) once the timer ends. */
+  showEndlessOver(result: EndlessOverResult): void
+  /** Hide all overlays (used while racing). */
   hide(): void
   /** Reflect the current mute state on the always-visible mute button. */
   setMuted(muted: boolean): void
@@ -99,6 +120,23 @@ export interface Hud {
  */
 export function formatTime(ms: number): string {
   return (ms / 1000).toFixed(TIME_DECIMALS) + ' s'
+}
+
+/**
+ * Format an endless COUNTDOWN (ms remaining) as "S.S s". Endless budgets never
+ * exceed 30 s, so a plain seconds readout is clearer than mm:ss; a negative /
+ * exhausted clock clamps to 0. Pure — exported for unit tests.
+ */
+export function formatCountdown(ms: number): string {
+  return (Math.max(0, ms) / 1000).toFixed(COUNTDOWN_DECIMALS) + ' s'
+}
+
+/**
+ * Format an endless DISTANCE (metres) as a whole-metre "N m" readout. Negative
+ * values clamp to 0. Pure — exported for unit tests.
+ */
+export function formatDistance(metres: number): string {
+  return `${Math.max(0, Math.floor(metres))} ${DISTANCE_UNIT}`
 }
 
 /**
@@ -222,6 +260,54 @@ export function createHud(root: HTMLElement, callbacks: HudCallbacks): Hud {
 
   root.appendChild(finishOverlay)
 
+  // ── Endless game-over overlay ──────────────────────────────────────────────
+  // Reuses the finish overlay's visual classes; distinct DOM so campaign and
+  // endless never fight over the same nodes.
+  const endlessOverlay = document.createElement('div')
+  endlessOverlay.className = 'hud-overlay hud-overlay--finish'
+  endlessOverlay.dataset['hud'] = 'endless-over'
+  endlessOverlay.hidden = true
+
+  const endlessMessage = document.createElement('p')
+  endlessMessage.className = 'hud-finish-message'
+  endlessMessage.textContent = t('endless.gameOver')
+  endlessOverlay.appendChild(endlessMessage)
+
+  const endlessDistance = document.createElement('p')
+  endlessDistance.className = 'hud-finish-time'
+  endlessOverlay.appendChild(endlessDistance)
+
+  const endlessBest = document.createElement('p')
+  endlessBest.className = 'hud-finish-best'
+  endlessOverlay.appendChild(endlessBest)
+
+  const endlessButtonRow = document.createElement('div')
+  endlessButtonRow.className = 'hud-btn-row'
+
+  const endlessRetryBtn = document.createElement('button')
+  endlessRetryBtn.type = 'button'
+  endlessRetryBtn.className = 'hud-btn hud-btn--primary'
+  endlessRetryBtn.dataset['hud'] = 'endless-retry'
+  endlessRetryBtn.textContent = t('hud.retry')
+  endlessRetryBtn.addEventListener('click', () => {
+    callbacks.onRetry()
+  })
+  endlessButtonRow.appendChild(endlessRetryBtn)
+
+  const endlessLevelsBtn = document.createElement('button')
+  endlessLevelsBtn.type = 'button'
+  endlessLevelsBtn.className = 'hud-btn hud-btn--secondary'
+  endlessLevelsBtn.dataset['hud'] = 'endless-levels'
+  endlessLevelsBtn.textContent = t('hud.levels')
+  endlessLevelsBtn.addEventListener('click', () => {
+    callbacks.onLevels()
+  })
+  endlessButtonRow.appendChild(endlessLevelsBtn)
+
+  endlessOverlay.appendChild(endlessButtonRow)
+
+  root.appendChild(endlessOverlay)
+
   return {
     setTime(ms: number): void {
       timer.textContent = formatTime(ms)
@@ -236,13 +322,20 @@ export function createHud(root: HTMLElement, callbacks: HudCallbacks): Hud {
       target.hidden = false
       target.textContent = `${t('hud.target')}: ${formatTime(ms)}`
     },
+    setEndless(timeLeftMs: number, distance: number): void {
+      timer.textContent = formatCountdown(timeLeftMs)
+      target.hidden = false
+      target.textContent = `${t('endless.distance')}: ${formatDistance(distance)}`
+    },
     showStart(): void {
       startOverlay.hidden = false
       finishOverlay.hidden = true
+      endlessOverlay.hidden = true
     },
     showFinish(result: FinishResult): void {
       startOverlay.hidden = true
       finishOverlay.hidden = false
+      endlessOverlay.hidden = true
       nextLevelBtn.hidden = !result.hasNextLevel
       finishTime.textContent = `${t('hud.time')}: ${formatTime(result.elapsedMs)}`
 
@@ -256,9 +349,17 @@ export function createHud(root: HTMLElement, callbacks: HudCallbacks): Hud {
           : `${t('label.best')}: ${formatTime(bestMs)} — ${t(medalMessageKey(result.best.bestMedal))}`
       finishBest.style.color = medalColorVar(result.best.bestMedal)
     },
+    showEndlessOver(result: EndlessOverResult): void {
+      startOverlay.hidden = true
+      finishOverlay.hidden = true
+      endlessOverlay.hidden = false
+      endlessDistance.textContent = `${t('endless.distance')}: ${formatDistance(result.distance)}`
+      endlessBest.textContent = `${t('label.best')}: ${formatDistance(result.best)}`
+    },
     hide(): void {
       startOverlay.hidden = true
       finishOverlay.hidden = true
+      endlessOverlay.hidden = true
     },
     setMuted(muted: boolean): void {
       muteBtn.textContent = muted ? MUTE_ICON_MUTED : MUTE_ICON_UNMUTED

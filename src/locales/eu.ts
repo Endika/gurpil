@@ -32,4 +32,8 @@ export const eu: Messages = {
   'hud.target': 'Helburua',
   'hud.mute': 'Mututu',
   'hud.unmute': 'Soinua aktibatu',
+  'endless.name': 'Amaigabea',
+  'endless.lockedHint': 'Osatu kanpaina',
+  'endless.distance': 'Distantzia',
+  'endless.gameOver': 'Denbora agortu da!',
 }

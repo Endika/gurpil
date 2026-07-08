@@ -2,10 +2,11 @@ import { describe, it, expect } from 'vitest'
 import {
   levelCardView,
   campaignCardViews,
+  endlessCardView,
   themeMessageKey,
 } from '../../src/ui/levelSelect'
 import { CAMPAIGN, CAMPAIGN_SIZE, levelByNumber } from '../../src/core/campaign'
-import { saveLevelResult, type KeyValueStore } from '../../src/core/records'
+import { saveLevelResult, saveEndlessDistance, type KeyValueStore } from '../../src/core/records'
 import { THEME_IDS } from '../../src/core/theme'
 
 /** A real, in-memory KeyValueStore fake (not a mock) backed by a Map. */
@@ -95,6 +96,38 @@ describe('campaignCardViews', () => {
       .filter((v) => !v.locked)
       .map((v) => v.number)
     expect(unlocked).toEqual([1, 2, 3])
+  })
+})
+
+describe('endlessCardView', () => {
+  function beatWholeCampaign(store: KeyValueStore): void {
+    for (let n = 1; n <= CAMPAIGN_SIZE; n++) saveLevelResult(store, n, 5000, 'gold')
+  }
+
+  it('is locked with no best on a fresh store', () => {
+    const store = createMemoryStore()
+    expect(endlessCardView(store)).toEqual({ locked: true, best: 0 })
+  })
+
+  it('stays locked (and hides any best) until the whole campaign is complete', () => {
+    const store = createMemoryStore()
+    // Even a recorded endless best does not leak while still locked.
+    saveEndlessDistance(store, 1200)
+    for (let n = 1; n < CAMPAIGN_SIZE; n++) saveLevelResult(store, n, 5000, 'gold')
+    expect(endlessCardView(store)).toEqual({ locked: true, best: 0 })
+  })
+
+  it('unlocks and surfaces the best distance once the campaign is complete', () => {
+    const store = createMemoryStore()
+    beatWholeCampaign(store)
+    saveEndlessDistance(store, 1234.5)
+    expect(endlessCardView(store)).toEqual({ locked: false, best: 1234.5 })
+  })
+
+  it('is unlocked with best 0 when the campaign is complete but never played', () => {
+    const store = createMemoryStore()
+    beatWholeCampaign(store)
+    expect(endlessCardView(store)).toEqual({ locked: false, best: 0 })
   })
 })
 

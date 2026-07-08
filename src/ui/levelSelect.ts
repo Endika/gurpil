@@ -18,11 +18,17 @@
 
 import { CAMPAIGN, type Level } from '../core/campaign'
 import type { Medal } from '../core/medal'
-import { isLevelUnlocked, loadLevelRecord, type KeyValueStore } from '../core/records'
+import {
+  isLevelUnlocked,
+  isEndlessUnlocked,
+  loadLevelRecord,
+  loadEndlessBest,
+  type KeyValueStore,
+} from '../core/records'
 import { THEMES, type ThemeId } from '../core/theme'
 import { t } from './i18n'
 import type { MessageKey } from './i18n'
-import { formatTime } from './hud'
+import { formatTime, formatDistance } from './hud'
 import { medalColorVar, medalMessageKey } from './medalDisplay'
 
 // ─── Pure helpers (exported for unit tests) ────────────────────────────────
@@ -56,6 +62,24 @@ export function campaignCardViews(store: KeyValueStore): LevelCardView[] {
   return CAMPAIGN.map((level) => levelCardView(store, level))
 }
 
+/** Everything the ENDLESS entry needs to render, derived from the store. */
+export interface EndlessCardView {
+  /** Locked until the whole campaign is complete (`isEndlessUnlocked`). */
+  locked: boolean
+  /** Best endless distance ever recorded (metres); 0 while locked / unplayed. */
+  best: number
+}
+
+/**
+ * Build the endless-entry view-model from the record store. Pure (given a
+ * store): locked until the campaign is complete, then surfaces the best
+ * distance. Exported for unit tests.
+ */
+export function endlessCardView(store: KeyValueStore): EndlessCardView {
+  const locked = !isEndlessUnlocked(store)
+  return { locked, best: locked ? 0 : loadEndlessBest(store) }
+}
+
 const THEME_MESSAGE_KEYS: Record<ThemeId, MessageKey> = {
   grassland: 'theme.grassland',
   desert: 'theme.desert',
@@ -81,6 +105,9 @@ const THEME_ICONS: Record<ThemeId, string> = {
 /** Padlock glyph shown on locked cards (visual only). */
 const LOCK_ICON = '🔒'
 
+/** Decorative glyph for the endless entry (visual only). */
+const ENDLESS_ICON = '♾️'
+
 /** Convert a theme's 0xRRGGBB hex `number` to a CSS `#rrggbb` string. Pure. */
 function hexColor(color: number): string {
   return `#${(color >>> 0).toString(16).padStart(6, '0').slice(-6)}`
@@ -98,6 +125,8 @@ export interface LevelSelectOptions {
   store: KeyValueStore
   /** Called with the 1-based level number when an UNLOCKED card is tapped. */
   onSelect: (levelNumber: number) => void
+  /** Called when the UNLOCKED endless entry is tapped. */
+  onEndless: () => void
 }
 
 /** Build the level-select grid and attach it to `root`. */
@@ -119,6 +148,7 @@ export function createLevelSelect(root: HTMLElement, opts: LevelSelectOptions): 
   }
 
   overlay.appendChild(grid)
+  overlay.appendChild(buildEndlessCard(opts))
   root.appendChild(overlay)
 
   return {
@@ -175,6 +205,49 @@ function buildCard(level: Level, opts: LevelSelectOptions): HTMLElement {
   card.setAttribute('aria-label', `${t('levelSelect.level')} ${level.number}`)
   card.addEventListener('click', () => {
     opts.onSelect(level.number)
+  })
+
+  return card
+}
+
+/**
+ * Build the ENDLESS entry — a wide card below the grid. Locked (padlock + hint)
+ * until the whole campaign is complete; once unlocked it shows the best distance
+ * and starts an endless run when tapped.
+ */
+function buildEndlessCard(opts: LevelSelectOptions): HTMLElement {
+  const view = endlessCardView(opts.store)
+
+  const card = document.createElement('button')
+  card.type = 'button'
+  card.className = `endless-card${view.locked ? ' endless-card--locked' : ''}`
+  card.dataset['endless'] = view.locked ? 'locked' : 'unlocked'
+
+  const icon = document.createElement('span')
+  icon.className = 'endless-card-icon'
+  icon.textContent = view.locked ? LOCK_ICON : ENDLESS_ICON
+  card.appendChild(icon)
+
+  const name = document.createElement('span')
+  name.className = 'endless-card-name'
+  name.textContent = t('endless.name')
+  card.appendChild(name)
+
+  const detail = document.createElement('span')
+  detail.className = 'endless-card-detail'
+  if (view.locked) {
+    detail.textContent = t('endless.lockedHint')
+    card.appendChild(detail)
+    card.disabled = true
+    card.setAttribute('aria-label', `${t('endless.name')} — ${t('levelSelect.locked')}`)
+    return card
+  }
+
+  detail.textContent = `${t('label.best')}: ${formatDistance(view.best)}`
+  card.appendChild(detail)
+  card.setAttribute('aria-label', t('endless.name'))
+  card.addEventListener('click', () => {
+    opts.onEndless()
   })
 
   return card

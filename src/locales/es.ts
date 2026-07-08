@@ -32,4 +32,8 @@ export const es: Messages = {
   'hud.target': 'Objetivo',
   'hud.mute': 'Silenciar',
   'hud.unmute': 'Activar sonido',
+  'endless.name': 'Sin fin',
+  'endless.lockedHint': 'Completa la campaña',
+  'endless.distance': 'Distancia',
+  'endless.gameOver': '¡Se acabó el tiempo!',
 }
