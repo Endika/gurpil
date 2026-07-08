@@ -16,10 +16,15 @@
  *   rotation   → mesh.rotation.z (Rapier angle is CCW in 2D = Three.js CCW from +z)
  *
  * Terrain z layering (z=0 plane is the physics plane):
- *   terrain strip:  z = -0.5 (behind vehicle)
- *   wheel meshes:   z =  0.4 (in front of chassis)
- *   chassis mesh:   z =  0.0
- *   monigote:       z =  0.1
+ *   terrain strip:            z = -0.5 (front face ≈ -0.45, behind the vehicle)
+ *   chassis, wheels, monigote: z =  0.0 (one shared plane)
+ * Chassis, wheels and monigote all sit on the SAME z-plane so the scooter and
+ * its rider read as one coherent, attached 3D object rather than a stack of
+ * flat layers pushed toward the camera at different depths (a leftover 2D-
+ * layering hack that was invisible in the old flat side view but reads as
+ * horizontal separation now that the camera has a 3/4 perspective). Only
+ * genuine sub-part depth — the blob's face features, arms and feet — is kept,
+ * expressed as small offsets RELATIVE to that shared plane.
  */
 
 import * as THREE from 'three'
@@ -28,7 +33,7 @@ import type { Vehicle } from '../physics/vehicle'
 import { SHAPES } from '../core/shapes'
 import type { ShapeId } from '../core/shapes'
 import { buildTerrainMesh, buildObstacleMeshes } from './terrain'
-import { wheelGeometry, WHEEL_VISUAL_RADIUS } from './wheelMesh'
+import { wheelGeometry, wheelGeometryBounds, WHEEL_VISUAL_RADIUS } from './wheelMesh'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -93,11 +98,22 @@ const CAM_Y_OFFSET = 2
 /** z position of the chassis mesh. */
 const CHASSIS_Z = 0
 
-/** z position of each wheel (in front of chassis for visibility). */
-const WHEEL_Z = 0.4
+/**
+ * z position of each wheel — the SAME plane as the chassis/deck (CHASSIS_Z),
+ * so the wheels read as attached under the deck instead of floating apart
+ * from it. This used to be pushed to 0.4 ("in front of chassis") as a 2D-
+ * layering trick to dodge terrain occlusion; that trick is no longer needed
+ * because the terrain's front face sits at ≈ -0.45 (see TERRAIN_Z) — well
+ * behind z=0 — so the wheels stay fully visible at the chassis plane.
+ */
+const WHEEL_Z = 0
 
-/** z position of the monigote body+head meshes. */
-const MONIGOTE_Z = 0.1
+/**
+ * z position of the monigote body+head meshes — the SAME plane as the
+ * chassis/wheels, so the rider reads as standing on the deck rather than
+ * floating in front of the vehicle.
+ */
+const MONIGOTE_Z = 0
 
 /**
  * z offset applied to the whole terrain mesh so it sits BEHIND the entire
@@ -105,9 +121,10 @@ const MONIGOTE_Z = 0.1
  *
  * The terrain strip is extruded away from the camera (front face at
  * TERRAIN_FRONT_Z ≈ +0.05 in terrain.ts) and then shifted back by this amount,
- * putting its frontmost face at ≈ -0.45 world-z — safely behind the chassis
- * (z=0), the monigote (0.1) and especially the wheels (WHEEL_Z=0.4), which sit
- * at ground level and used to be hidden behind the terrain's front wall.
+ * putting its frontmost face at ≈ -0.45 world-z — safely behind the chassis,
+ * wheels and monigote, which all now share the z=0 plane (CHASSIS_Z, WHEEL_Z,
+ * MONIGOTE_Z) so the vehicle stays fully visible and reads as one solid,
+ * attached object.
  */
 const TERRAIN_Z = -0.5
 
@@ -319,9 +336,10 @@ const SPARK_GRAVITY = -4
 const SPARK_EMIT_OFFSET_X = -0.15
 const SPARK_EMIT_OFFSET_Y = -WHEEL_VISUAL_RADIUS * 0.9
 
-/** z of the spark sprites — same neighbourhood as the wheels so they read as
- *  coming off the ground contact, without z-fighting the disc. */
-const SPARK_Z = 0.45
+/** z of the spark sprites — the SAME plane as the wheels (see WHEEL_Z) so
+ *  they read as coming off the rear wheel's ground contact instead of
+ *  floating out in front of the vehicle. */
+const SPARK_Z = WHEEL_Z
 
 /** Bright warm spark colors — sparks pick one of these at spawn for variety. */
 const SPARK_COLORS = [0xfff3b0, 0xffd23f, 0xff9f1c]
@@ -355,8 +373,25 @@ const SPOKE_LENGTH = WHEEL_VISUAL_RADIUS * 2 * 0.9
 /** Spoke thickness (metres) — thin bar. */
 const SPOKE_THICKNESS = WHEEL_VISUAL_RADIUS * 0.28
 
-/** Spoke z: just in front of the disc face so it is never z-fought or hidden. */
-const SPOKE_Z = 0.55
+/**
+ * Half the wheel disc's own z-thickness, derived from the real wheel geometry
+ * (wheelGeometryBounds is the single source of truth for wheel depth, shared
+ * with wheelMesh.ts) rather than a hand-picked number that could drift out of
+ * sync with it.
+ */
+const WHEEL_HALF_DEPTH = wheelGeometryBounds('circle').depth / 2
+
+/** Tiny clearance added past the wheel's front face so the spoke never
+ *  z-fights the disc surface. */
+const SPOKE_FRONT_MARGIN = 0.02
+
+/**
+ * Spoke z, in the wheel's OWN local space (the spoke is a child of the wheel
+ * mesh, so this is independent of the wheel's world z / WHEEL_Z). Sits just
+ * proud of the wheel's front face — not buried inside the solid disc, and not
+ * floating far out in front of it.
+ */
+const SPOKE_Z = WHEEL_HALF_DEPTH + SPOKE_FRONT_MARGIN
 
 // ─── Juice animation constants ────────────────────────────────────────────────
 
@@ -894,7 +929,7 @@ function buildVehicleMeshes(): VehicleMeshes {
     // Spin-marker spoke: child of the wheel so it inherits its rotation.z and
     // sweeps visibly as the disc rolls. Shown only for the circle (see sync()).
     const spoke = new THREE.Mesh(spokeGeo, spokeMat)
-    spoke.position.set(0, 0, SPOKE_Z - WHEEL_Z) // local: sits just in front of the disc
+    spoke.position.set(0, 0, SPOKE_Z) // local: sits just proud of the disc's front face
     mesh.add(spoke)
     spokes.push(spoke)
   }
