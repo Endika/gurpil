@@ -38,6 +38,11 @@ export default defineConfig({
       workbox: {
         globPatterns: ["**/*.{js,css,html,png,webmanifest,woff,woff2}"],
         runtimeCaching: [],
+        // The single app bundle (Three.js + Rapier + game) is ~2 MB, just over
+        // workbox's 2 MiB default. Raise the precache ceiling to 4 MiB so the
+        // main chunk is always precached — required for the game to work fully
+        // offline (an offline-first PWA) — with headroom for future growth.
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
       },
     }),
   ],

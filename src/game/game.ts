@@ -36,10 +36,10 @@
  * reloads to the grid.
  */
 
-import { generateCourse } from '../core/course'
-import { THEMES } from '../core/theme'
+import { generateCourse, generateEndlessCourse } from '../core/course'
+import { THEMES, pickTheme } from '../core/theme'
 import { parTimeMs, medalFor, type Medal } from '../core/medal'
-import { saveLevelResult, type Record as BestRecord } from '../core/records'
+import { saveLevelResult, saveEndlessDistance, type Record as BestRecord } from '../core/records'
 import { levelByNumber, CAMPAIGN_SIZE, type Level } from '../core/campaign'
 import { createWorld, PHYSICS_TIMESTEP } from '../physics/world'
 import { createVehicle } from '../physics/vehicle'
@@ -50,6 +50,7 @@ import { createLevelSelect } from '../ui/levelSelect'
 import { createLocalStorageStore } from '../ui/localStorageStore'
 import { createAudio, type Audio } from '../audio/audio'
 import { createRun, startRun, tickRun } from '../core/run'
+import { createEndless, startEndless, tickEndless } from '../core/endless'
 import { advanceAccumulator, MAX_STEPS_PER_FRAME } from './loop'
 import {
   parsePendingRace,
@@ -70,6 +71,15 @@ const STEP_MS = PHYSICS_TIMESTEP * 1000
  * on the terrain before the player can start the race.
  */
 const SETTLE_STEPS = 90
+
+/** Medal whose short "no medal" jingle doubles as the endless time-up cue. */
+const ENDLESS_OVER_SOUND: Medal = 'none'
+
+/** A fresh, random seed for an endless run (a uint32). Non-deterministic on
+ *  purpose — each endless run rolls a new track + theme. */
+function randomEndlessSeed(): number {
+  return Math.floor(Math.random() * 0x1_0000_0000) >>> 0
+}
 
 // ─── Pending-level handoff (sessionStorage-backed; see pendingRace.ts) ─────────
 
@@ -107,7 +117,11 @@ export async function startGame(root: HTMLElement): Promise<void> {
   const pending = readPendingRace()
   if (pending !== null) {
     writePendingRace(null)
-    const level = levelByNumber(pending.levelNumber)
+    if (pending.mode === 'endless') {
+      await runEndless(root, store, audio, pending.seed)
+      return
+    }
+    const level = levelByNumber(pending.number)
     if (level !== undefined) {
       await runLevel(root, store, audio, level)
       return
@@ -118,7 +132,7 @@ export async function startGame(root: HTMLElement): Promise<void> {
   showLevelSelect(root, store, audio)
 }
 
-/** Show the level-select grid; tapping an unlocked level starts it. */
+/** Show the level-select grid; tapping an unlocked level (or endless) starts it. */
 function showLevelSelect(root: HTMLElement, store: KeyValueStore, audio: Audio): void {
   const select = createLevelSelect(root, {
     store,
@@ -128,6 +142,12 @@ function showLevelSelect(root: HTMLElement, store: KeyValueStore, audio: Audio):
       select.destroy()
       runLevel(root, store, audio, level).catch((err: unknown) => {
         console.error('[gurpil] level failed to start', err)
+      })
+    },
+    onEndless: () => {
+      select.destroy()
+      runEndless(root, store, audio, randomEndlessSeed()).catch((err: unknown) => {
+        console.error('[gurpil] endless failed to start', err)
       })
     },
   })
@@ -164,11 +184,11 @@ async function runLevel(
   // ── HUD ───────────────────────────────────────────────────────────────────
   const hud = createHud(root, {
     onRetry: () => {
-      writePendingRace({ levelNumber: level.number })
+      writePendingRace({ mode: 'level', number: level.number })
       location.reload()
     },
     onNextLevel: () => {
-      writePendingRace({ levelNumber: level.number + 1 })
+      writePendingRace({ mode: 'level', number: level.number + 1 })
       location.reload()
     },
     onLevels: () => {
@@ -286,4 +306,142 @@ async function runLevel(
     `[gurpil] level ${level.number} started — difficulty=${level.difficulty} ` +
       `seed=${level.seed} theme=${level.themeId}`,
   )
+}
+
+/**
+ * Build and run a single ENDLESS run.
+ *
+ * Mirrors `runLevel`'s subsystem wiring (world / vehicle / scene / draw-box /
+ * fixed-step loop / audio) but swaps the finite `RunState` for `EndlessState`:
+ * the timer — not a finish line — ends the run. Distance travelled is the score.
+ * On game-over the best distance is persisted and the endless game-over overlay
+ * is shown (Retry → fresh endless run with a new seed; Levels → back to grid).
+ */
+async function runEndless(
+  root: HTMLElement,
+  store: KeyValueStore,
+  audio: Audio,
+  seed: number,
+): Promise<void> {
+  // ── Build subsystems ──────────────────────────────────────────────────────
+  const course = generateEndlessCourse({ seed })
+  const world = await createWorld(course)
+
+  // Spawn vehicle slightly above start so it settles under gravity.
+  const vehicle = createVehicle(world, { x: course.startX + 2, y: 2 })
+
+  // Silent settle: let the vehicle land on the terrain before rendering.
+  for (let i = 0; i < SETTLE_STEPS; i++) {
+    world.step()
+  }
+
+  // One theme per run, chosen deterministically from the same seed as the track.
+  const theme = THEMES[pickTheme(seed)]
+  const scene = createScene(course, theme)
+
+  // ── HUD ───────────────────────────────────────────────────────────────────
+  const hud = createHud(root, {
+    // Retry = a brand-new endless run (fresh random seed).
+    onRetry: () => {
+      writePendingRace({ mode: 'endless', seed: randomEndlessSeed() })
+      location.reload()
+    },
+    // Endless has no "next level" — the endless overlay never shows that button.
+    onNextLevel: () => {
+      /* not used in endless mode */
+    },
+    onLevels: () => {
+      writePendingRace(null)
+      location.reload()
+    },
+    onToggleMute: () => {
+      const nextMuted = !audio.isMuted()
+      audio.setMuted(nextMuted)
+      hud.setMuted(nextMuted)
+    },
+  })
+  hud.setMuted(audio.isMuted())
+
+  // ── Endless state ─────────────────────────────────────────────────────────
+  let endless = createEndless()
+
+  // The best distance is persisted + the game-over overlay shown exactly ONCE,
+  // the first frame the run reaches 'over'.
+  let overResult: { distance: number; best: number } | null = null
+
+  // ── Draw-box ──────────────────────────────────────────────────────────────
+  const drawBox = createDrawBox((id) => {
+    audio.unlock()
+    audio.blip()
+    vehicle.swapShape(id)
+    // First draw starts the run; subsequent draws only swap the shape.
+    if (endless.phase === 'idle') {
+      endless = startEndless(endless)
+    }
+  })
+  root.appendChild(drawBox.el)
+
+  // ── Fixed-step accumulator state ──────────────────────────────────────────
+  let accumMs = 0
+  let lastTs = performance.now()
+
+  // ── rAF loop ──────────────────────────────────────────────────────────────
+  function frame(): void {
+    const now = performance.now()
+    const frameMs = now - lastTs
+    lastTs = now
+
+    const acc = advanceAccumulator(accumMs, frameMs, STEP_MS, MAX_STEPS_PER_FRAME)
+    accumMs = acc.accumulatorMs
+
+    // Physics steps: auto-throttle forward while running; cut it once over.
+    for (let i = 0; i < acc.steps; i++) {
+      if (endless.phase === 'running') {
+        vehicle.setThrottle(1)
+        vehicle.applyDrive()
+      } else {
+        vehicle.setThrottle(0)
+      }
+      vehicle.stabilize()
+      world.step()
+    }
+
+    // Tick endless state after all physics steps this frame (no finish-line
+    // logic — the timer is the only end condition).
+    if (acc.steps > 0) {
+      const steppedMs = acc.steps * STEP_MS
+      endless = tickEndless(endless, steppedMs, vehicle.position().x, course.startX)
+    }
+
+    // ── HUD update ───────────────────────────────────────────────────────
+    const speedMps = vehicle.chassis.linvel().x
+    hud.setEndless(endless.timeLeftMs, endless.distance)
+    hud.setSpeed(speedMps)
+    if (endless.phase === 'idle') {
+      hud.showStart()
+      audio.setEngine(0)
+    } else if (endless.phase === 'running') {
+      hud.hide()
+      audio.setEngine(speedFraction(speedMps))
+    } else {
+      // over — persist the best distance + play the cue once, then keep showing.
+      if (overResult === null) {
+        const best = saveEndlessDistance(store, endless.distance)
+        overResult = { distance: endless.distance, best }
+        audio.finish(ENDLESS_OVER_SOUND)
+      }
+      hud.showEndlessOver(overResult)
+      audio.setEngine(0)
+    }
+
+    // ── Render ───────────────────────────────────────────────────────────
+    scene.sync(vehicle)
+    scene.render()
+
+    requestAnimationFrame(frame)
+  }
+
+  requestAnimationFrame(frame)
+
+  console.log(`[gurpil] endless started — seed=${seed} theme=${theme.id}`)
 }
