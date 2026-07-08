@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.0](https://github.com/Endika/gurpil/compare/v0.2.0...v0.3.0) (2026-07-08)
+
+
+### Features
+
+* **audio:** synth engine hum, swap blips, finish jingle + mute ([ceb53cc](https://github.com/Endika/gurpil/commit/ceb53cc4f9aa661041df0d26a65e62cd4f1dbd23))
+* **render:** soft 3/4 perspective, shadows and atmosphere ([4602014](https://github.com/Endika/gurpil/commit/4602014bce533e8659b5e8e3d175f82682479aad))
+
+
+### Bug Fixes
+
+* **render:** center vehicle parts on one z-plane so the scooter reads as a solid 3D object ([6feaaf2](https://github.com/Endika/gurpil/commit/6feaaf2a806a048e127e75f53c6966c69990d884))
+* **render:** sit the vehicle and eggs on the road surface under the 3/4 camera ([df6ae27](https://github.com/Endika/gurpil/commit/df6ae27a4c454fc2e580227fa017630d7cd472c4))
+
 ## [0.2.0](https://github.com/Endika/gurpil/compare/v0.1.0...v0.2.0) (2026-07-08)
 
 
