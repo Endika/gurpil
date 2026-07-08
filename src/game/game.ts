@@ -283,6 +283,10 @@ async function runLevel(
         const best = saveLevelResult(store, level.number, run.elapsedMs, medal)
         finishResult = { medal, best }
         audio.finish(medal)
+        if (medal !== 'none') {
+          const pos = vehicle.position()
+          scene.medalCelebration(medal, pos.x, pos.y)
+        }
       }
       hud.showFinish({
         elapsedMs: run.elapsedMs,
@@ -410,7 +414,12 @@ async function runEndless(
     // logic — the timer is the only end condition).
     if (acc.steps > 0) {
       const steppedMs = acc.steps * STEP_MS
+      const checkpointsHitBefore = endless.checkpointsHit
       endless = tickEndless(endless, steppedMs, vehicle.position().x, course.startX)
+      if (endless.checkpointsHit > checkpointsHitBefore) {
+        const pos = vehicle.position()
+        scene.checkpointBurst(pos.x, pos.y)
+      }
     }
 
     // ── HUD update ───────────────────────────────────────────────────────

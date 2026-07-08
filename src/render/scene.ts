@@ -31,9 +31,10 @@
  */
 
 import * as THREE from 'three'
-import type { Course } from '../core/course'
+import { zoneAt, type Course } from '../core/course'
 import type { Theme } from '../core/theme'
 import type { Vehicle } from '../physics/vehicle'
+import type { Medal } from '../core/medal'
 import { SHAPES } from '../core/shapes'
 import type { ShapeId } from '../core/shapes'
 import { buildTerrainMesh, buildObstacleMeshes, buildGroundBackdrop, TERRAIN_FRONT_Z } from './terrain'
@@ -396,6 +397,387 @@ interface Spark {
   baseSize: number
 }
 
+// ─── Shared pooled-particle infrastructure ─────────────────────────────────────
+// The four effects below (landing dust, water splash, checkpoint burst, medal
+// confetti) all reuse the SAME pooled-mesh shape as the max-speed sparks above:
+// a fixed-size array of meshes created once, added to the scene once, and only
+// ever repositioned/rescaled/faded — never allocated per frame. `Particle` is
+// the shared per-slot state; `buildParticlePool`/`integrateParticle` factor out
+// the bookkeeping identical across all four pools.
+
+interface Particle {
+  mesh: THREE.Mesh
+  velocity: THREE.Vector3
+  /** Seconds remaining before this particle expires and can be respawned. Zero
+   *  (or less) means the particle is dead and available for reuse. */
+  life: number
+  /** Total lifetime this particle was (re)spawned with, for fade/shrink easing. */
+  maxLife: number
+  /** Size (scale) this particle was spawned with, for the shrink-over-life ease. */
+  baseSize: number
+}
+
+/** Low-poly sphere segment counts shared by every "puff/droplet/sparkle" pool
+ *  (dust, splash, checkpoint) — cheap, and small enough on screen that extra
+ *  roundness would be wasted. */
+const PUFF_SPHERE_SEGMENTS_W = 6
+const PUFF_SPHERE_SEGMENTS_H = 5
+
+/** Build a reusable particle pool: `size` meshes sharing one `geometry`, each
+ *  with its OWN material (color cycles through `colors`) so fade/tint can
+ *  differ per slot. All start dead (invisible) until (re)spawned. */
+function buildParticlePool(
+  size: number,
+  geometry: THREE.BufferGeometry,
+  colors: readonly number[],
+  blending: THREE.Blending,
+): Particle[] {
+  const pool: Particle[] = []
+  for (let i = 0; i < size; i++) {
+    const material = new THREE.MeshBasicMaterial({
+      color: colors[i % colors.length],
+      transparent: true,
+      opacity: 0,
+      blending,
+      depthWrite: false,
+    })
+    const mesh = new THREE.Mesh(geometry, material)
+    mesh.visible = false
+    pool.push({ mesh, velocity: new THREE.Vector3(), life: 0, maxLife: 1, baseSize: 0.05 })
+  }
+  return pool
+}
+
+/** Integrate one already-live particle by `dtSec` under `gravity`: move it,
+ *  age it, and ease its scale/opacity toward 0 over its remaining life —
+ *  hiding it once expired. Mirrors the sparks' per-spark integration step. */
+function integrateParticle(p: Particle, dtSec: number, gravity: number): void {
+  p.life -= dtSec
+  p.velocity.y += gravity * dtSec
+  p.mesh.position.x += p.velocity.x * dtSec
+  p.mesh.position.y += p.velocity.y * dtSec
+
+  if (p.life <= 0) {
+    p.mesh.visible = false
+    return
+  }
+  const lifeFrac = p.life / p.maxLife
+  p.mesh.scale.setScalar(p.baseSize * lifeFrac)
+  ;(p.mesh.material as THREE.MeshBasicMaterial).opacity = lifeFrac
+}
+
+/** Integrate every currently-live particle in `pool` by one frame. Called
+ *  every frame regardless of whether anything is spawning, so a one-off burst
+ *  (checkpoint/confetti) keeps animating after the triggering event. */
+function integrateParticlePool(pool: Particle[], dtSec: number, gravity: number): void {
+  for (const p of pool) {
+    if (p.life > 0) integrateParticle(p, dtSec, gravity)
+  }
+}
+
+/**
+ * Activate up to `count` currently-dead slots in `pool` as a one-off radial
+ * burst centred at (x, y, z): each spawned particle flies outward at a random
+ * angle and speed in [speedMin, speedMax], with `upwardBias` added to its
+ * vertical velocity so the burst reads as rising rather than a flat ring.
+ * `colorForIndex`, if given, retints the i-th spawned slot's material (used by
+ * the medal celebration, whose color depends on which medal was earned —
+ * mutating an existing material's color is cheap, same as the wheel-swap
+ * flash already does elsewhere in this file).
+ */
+function spawnRadialBurst(
+  pool: Particle[],
+  count: number,
+  x: number,
+  y: number,
+  z: number,
+  speedMin: number,
+  speedMax: number,
+  upwardBias: number,
+  lifeMin: number,
+  lifeMax: number,
+  sizeMin: number,
+  sizeMax: number,
+  colorForIndex?: (spawnIndex: number) => number,
+): void {
+  let spawned = 0
+  for (const p of pool) {
+    if (spawned >= count) break
+    if (p.life > 0) continue // still alive from a previous burst — leave it
+
+    if (colorForIndex) {
+      ;(p.mesh.material as THREE.MeshBasicMaterial).color.setHex(colorForIndex(spawned))
+    }
+
+    const angle = Math.random() * Math.PI * 2
+    const speed = THREE.MathUtils.randFloat(speedMin, speedMax)
+    p.maxLife = THREE.MathUtils.randFloat(lifeMin, lifeMax)
+    p.life = p.maxLife
+    p.baseSize = THREE.MathUtils.randFloat(sizeMin, sizeMax)
+    p.velocity.set(Math.cos(angle) * speed, Math.sin(angle) * speed * 0.6 + upwardBias, 0)
+    p.mesh.position.set(x, y, z)
+    p.mesh.scale.setScalar(p.baseSize)
+    ;(p.mesh.material as THREE.MeshBasicMaterial).opacity = 1
+    p.mesh.visible = true
+    spawned++
+  }
+}
+
+/** Vertical offset from a wheel's centre to its ground-contact point (metres)
+ *  — shared by every wheel-anchored effect below (dust, splash). Same
+ *  measurement the sparks use (SPARK_EMIT_OFFSET_Y), named separately here
+ *  since it's a generic wheel/ground fact, not a spark-specific tuning. */
+const WHEEL_CONTACT_OFFSET_Y = -WHEEL_VISUAL_RADIUS * 0.9
+
+// ─── Landing dust ───────────────────────────────────────────────────────────────
+// A quick, soft puff of dust at both wheels when the chassis LANDS after
+// airtime (off a ramp, or a big bump) — detected purely from a sharp arrest in
+// the chassis's downward vertical velocity (falling fast one frame, no longer
+// falling fast the next), so it fires for any hard landing, not only ramps.
+
+/**
+ * Downward chassis vertical velocity (m/s) the frame BEFORE landing must have
+ * reached, for a puff to count as a genuine hard landing rather than every
+ * tiny bounce over rocky terrain.
+ */
+export const LANDING_FALL_SPEED_MIN = 4.5
+
+/**
+ * Vertical velocity (m/s) the chassis must have recovered to (or past) THIS
+ * frame for the fall to count as "arrested" by the ground. Kept slightly
+ * negative (not exactly 0) so a landing that still settles a touch still
+ * counts.
+ */
+export const LANDING_ARREST_THRESHOLD = -1.5
+
+/** Minimum time (seconds) between two landing puffs, so a bouncy landing on
+ *  rough ground can't spam bursts every frame. */
+const LANDING_COOLDOWN_SEC = 0.35
+
+/**
+ * True when the chassis's vertical velocity shows a genuine hard landing THIS
+ * frame: it was falling at least LANDING_FALL_SPEED_MIN one frame ago, and by
+ * this frame that fall has already been arrested. Pure and WebGL-free so it
+ * can be unit tested directly.
+ */
+export function detectLanding(prevVelY: number, currVelY: number): boolean {
+  return prevVelY <= -LANDING_FALL_SPEED_MIN && currVelY >= LANDING_ARREST_THRESHOLD
+}
+
+/** Size of the reusable dust pool. */
+const DUST_POOL_SIZE = 20
+
+/** Particles spawned per landing event, split evenly across both wheels. */
+const DUST_BURST_COUNT = 10
+
+/** Dust lifetime range (seconds) — a quick puff, not a lingering cloud. */
+const DUST_LIFETIME_MIN = 0.3
+const DUST_LIFETIME_MAX = 0.55
+
+/** Dust particle size range (metres). */
+const DUST_SIZE_MIN = 0.08
+const DUST_SIZE_MAX = 0.16
+
+/** Dust radial ejection speed range (m/s) and upward bias — spreads sideways
+ *  and puffs gently upward rather than shooting off like sparks. */
+const DUST_SPEED_MIN = 0.6
+const DUST_SPEED_MAX = 1.8
+const DUST_UPWARD_BIAS = 0.8
+
+/** Light gravity so dust drifts rather than drops like a solid object. */
+const DUST_GRAVITY = -2.5
+
+/** z of dust puffs — same plane as the wheels (ground contact). */
+const DUST_Z = WHEEL_Z
+
+/** How much lighter than the ground-backdrop color the dust puff reads (0 =
+ *  identical to the ground, 1 = white) — a lifted, sun-bleached puff rather
+ *  than a solid clump the same shade as the dirt it came from. */
+const DUST_LIGHTEN = 0.45
+
+/** Build the dust pool; colors derive from the theme's ground-backdrop color
+ *  (lightened) so the puff reads as this biome's dirt, not a hardcoded hue. */
+function buildDustPool(theme: Theme): Particle[] {
+  const geometry = new THREE.SphereGeometry(1, PUFF_SPHERE_SEGMENTS_W, PUFF_SPHERE_SEGMENTS_H)
+  const base = new THREE.Color(theme.groundBackdrop)
+  const light = base.clone().lerp(new THREE.Color(0xffffff), DUST_LIGHTEN)
+  const mid = base.clone().lerp(light, 0.5)
+  return buildParticlePool(DUST_POOL_SIZE, geometry, [light.getHex(), mid.getHex()], THREE.NormalBlending)
+}
+
+// ─── Water splash ───────────────────────────────────────────────────────────────
+// Small droplets kicked up at the wheels while the vehicle rolls through a
+// WATER zone and is actually moving — a continuous, sparse spray using the
+// same pooled-respawn-while-active pattern as the max-speed sparks (as
+// opposed to the one-off bursts below).
+
+/** Forward speed (m/s) below which the car counts as stationary in water — no
+ *  splash while just sitting still. */
+const SPLASH_MIN_SPEED = 0.4
+
+/** Size of the reusable splash pool. */
+const SPLASH_POOL_SIZE = 14
+
+/** Max droplets (re)spawned in a single frame while in water and moving. */
+const SPLASH_SPAWN_PER_FRAME = 1
+
+/** Splash droplet lifetime range (seconds). */
+const SPLASH_LIFETIME_MIN = 0.18
+const SPLASH_LIFETIME_MAX = 0.38
+
+/** Splash droplet size range (metres). */
+const SPLASH_SIZE_MIN = 0.04
+const SPLASH_SIZE_MAX = 0.09
+
+/** Splash ejection velocity: mostly upward with a little sideways spread. */
+const SPLASH_VEL_X_MIN = -1.2
+const SPLASH_VEL_X_MAX = 1.2
+const SPLASH_VEL_Y_MIN = 0.8
+const SPLASH_VEL_Y_MAX = 2.0
+
+/** Real-gravity-ish fall so droplets arc back down into the water quickly. */
+const SPLASH_GRAVITY = -9
+
+/** z of splash droplets — same plane as the wheels. */
+const SPLASH_Z = WHEEL_Z
+
+/** Build the splash pool; colors come from the theme's water + water-highlight
+ *  so each biome's crossing (river, oasis, meltwater, lava…) splashes its own
+ *  color instead of a hardcoded blue. */
+function buildSplashPool(theme: Theme): Particle[] {
+  const geometry = new THREE.SphereGeometry(1, PUFF_SPHERE_SEGMENTS_W, PUFF_SPHERE_SEGMENTS_H)
+  return buildParticlePool(
+    SPLASH_POOL_SIZE,
+    geometry,
+    [theme.terrain.water, theme.terrain.waterHighlight],
+    THREE.NormalBlending,
+  )
+}
+
+/**
+ * Advance the splash pool by one frame: integrate every live droplet, and —
+ * only while `active` (over water AND moving) — respawn a few expired
+ * droplets at a random wheel's ground contact. Mirrors `updateSparks`'s
+ * integrate-or-respawn loop.
+ */
+function updateSplash(
+  pool: Particle[],
+  active: boolean,
+  wheelXs: readonly [number, number],
+  wheelYs: readonly [number, number],
+  dtSec: number,
+): void {
+  let spawnedThisFrame = 0
+
+  for (const p of pool) {
+    if (p.life > 0) {
+      integrateParticle(p, dtSec, SPLASH_GRAVITY)
+      continue
+    }
+
+    if (active && spawnedThisFrame < SPLASH_SPAWN_PER_FRAME) {
+      spawnedThisFrame++
+      const wheelIndex = Math.random() < 0.5 ? 0 : 1
+
+      p.maxLife = THREE.MathUtils.randFloat(SPLASH_LIFETIME_MIN, SPLASH_LIFETIME_MAX)
+      p.life = p.maxLife
+      p.baseSize = THREE.MathUtils.randFloat(SPLASH_SIZE_MIN, SPLASH_SIZE_MAX)
+      p.velocity.set(
+        THREE.MathUtils.randFloat(SPLASH_VEL_X_MIN, SPLASH_VEL_X_MAX),
+        THREE.MathUtils.randFloat(SPLASH_VEL_Y_MIN, SPLASH_VEL_Y_MAX),
+        0,
+      )
+      p.mesh.position.set(wheelXs[wheelIndex], wheelYs[wheelIndex] + WHEEL_CONTACT_OFFSET_Y, SPLASH_Z)
+      p.mesh.scale.setScalar(p.baseSize)
+      ;(p.mesh.material as THREE.MeshBasicMaterial).opacity = 1
+      p.mesh.visible = true
+    }
+  }
+}
+
+// ─── Endless checkpoint burst ───────────────────────────────────────────────────
+// A cheerful one-off sparkle burst near the vehicle each time an endless-mode
+// checkpoint is hit (see EndlessState.checkpointsHit in game.ts) — a small
+// celebratory pulse, not a lingering effect. Exposed as `checkpointBurst()`.
+
+const CHECKPOINT_POOL_SIZE = 16
+const CHECKPOINT_LIFETIME_MIN = 0.35
+const CHECKPOINT_LIFETIME_MAX = 0.6
+const CHECKPOINT_SIZE_MIN = 0.06
+const CHECKPOINT_SIZE_MAX = 0.13
+/** Radial ejection speed range (m/s) — sparkles fan outward from the vehicle. */
+const CHECKPOINT_SPEED_MIN = 1.5
+const CHECKPOINT_SPEED_MAX = 3.5
+/** Extra upward bias (m/s) added to every sparkle so the burst reads as rising. */
+const CHECKPOINT_UPWARD_BIAS = 1.2
+/** Light gravity — sparkles hang for their short life instead of dropping. */
+const CHECKPOINT_GRAVITY = -1.5
+/** Height above the chassis the burst is centred at, so it reads near the
+ *  car/rider rather than down at wheel level. */
+const CHECKPOINT_Y_OFFSET = 1.0
+const CHECKPOINT_Z = WHEEL_Z
+/** Bright, cheerful sparkle colors — additive-blended so they read as a glow. */
+const CHECKPOINT_COLORS = [0x7cf6ff, 0xffe66d, 0xff6ec7, 0xa8ff9e]
+
+function buildCheckpointPool(): Particle[] {
+  const geometry = new THREE.SphereGeometry(1, PUFF_SPHERE_SEGMENTS_W, PUFF_SPHERE_SEGMENTS_H)
+  return buildParticlePool(CHECKPOINT_POOL_SIZE, geometry, CHECKPOINT_COLORS, THREE.AdditiveBlending)
+}
+
+// ─── Medal celebration confetti ─────────────────────────────────────────────────
+// A confetti burst on campaign finish when a medal is earned — bigger and
+// brighter the higher the medal; 'none' fires nothing. Triggered explicitly
+// from game.ts on the finish transition via `medalCelebration()`.
+
+/** Confetti piece count per medal — the "bigger for gold" half of the brief. */
+const CONFETTI_COUNT_BY_MEDAL: Record<Medal, number> = {
+  none: 0,
+  bronze: 14,
+  silver: 22,
+  gold: 36,
+}
+
+/** Pool sized for the biggest (gold) burst. */
+const CONFETTI_POOL_SIZE = Math.max(...Object.values(CONFETTI_COUNT_BY_MEDAL))
+
+/** Confetti palette per medal — the "brighter for gold" half of the brief
+ *  (gold's palette leans hot yellow/gold rather than a generic rainbow). */
+const CONFETTI_COLORS_BY_MEDAL: Record<Medal, readonly number[]> = {
+  none: [0xffffff],
+  bronze: [0xff9f5a, 0xd97b3f, 0xffb066],
+  silver: [0xdbe4ec, 0xffffff, 0xb8c4d0, 0x8ecae6],
+  gold: [0xffd700, 0xfff3b0, 0xffee58, 0xffc300],
+}
+
+const CONFETTI_LIFETIME_MIN = 0.6
+const CONFETTI_LIFETIME_MAX = 1.1
+const CONFETTI_SIZE_MIN = 0.07
+const CONFETTI_SIZE_MAX = 0.14
+const CONFETTI_SPEED_MIN = 2.0
+const CONFETTI_SPEED_MAX = 4.5
+const CONFETTI_UPWARD_BIAS = 2.5
+const CONFETTI_GRAVITY = -3.5
+/** Height above the chassis the burst is centred at. */
+const CONFETTI_Y_OFFSET = 1.4
+const CONFETTI_Z = WHEEL_Z
+/** Flat, fleck-like box so pieces read as confetti rather than round sparkles. */
+const CONFETTI_DEPTH = 0.25
+
+/** How many confetti pieces a given medal earns — 'none' earns zero, so
+ *  callers can skip triggering the celebration entirely. Pure and WebGL-free
+ *  so it can be unit tested directly. */
+export function confettiCountForMedal(medal: Medal): number {
+  return CONFETTI_COUNT_BY_MEDAL[medal]
+}
+
+function buildConfettiPool(): Particle[] {
+  const geometry = new THREE.BoxGeometry(1, 1, CONFETTI_DEPTH)
+  // Placeholder palette at creation — medalCelebration() retints the slots it
+  // activates to the earned medal's palette via spawnRadialBurst's
+  // colorForIndex, so this initial color is never actually seen.
+  return buildParticlePool(CONFETTI_POOL_SIZE, geometry, CONFETTI_COLORS_BY_MEDAL.gold, THREE.NormalBlending)
+}
+
 // ─── Wheel spin marker (spoke) ─────────────────────────────────────────────────
 
 /**
@@ -561,6 +943,12 @@ const HILL_LAYERS: HillLayerSpec[] = [
 export interface Scene3D {
   sync(vehicle: Vehicle): void
   render(): void
+  /** Trigger a cheerful sparkle burst near (x, y) — called from game.ts each
+   *  time an endless-mode checkpoint is hit. */
+  checkpointBurst(x: number, y: number): void
+  /** Trigger a confetti celebration near (x, y) sized/colored to `medal` —
+   *  called from game.ts on a campaign finish. A no-op for medal 'none'. */
+  medalCelebration(medal: Medal, x: number, y: number): void
 }
 
 // ─── Internal types ───────────────────────────────────────────────────────────
@@ -710,6 +1098,22 @@ export function createScene(course: Course, theme: Theme): Scene3D {
   const sparks = buildSparkPool()
   for (const spark of sparks) scene.add(spark.mesh)
 
+  // ── Juice: landing dust / water splash / checkpoint burst / confetti ────────────
+  // World-space pools (see the "Shared pooled-particle infrastructure" section
+  // above), same reasoning as the sparks pool: they stay put in the world
+  // rather than moving/tilting with the chassis.
+  const dustPool = buildDustPool(theme)
+  for (const p of dustPool) scene.add(p.mesh)
+
+  const splashPool = buildSplashPool(theme)
+  for (const p of splashPool) scene.add(p.mesh)
+
+  const checkpointPool = buildCheckpointPool()
+  for (const p of checkpointPool) scene.add(p.mesh)
+
+  const confettiPool = buildConfettiPool()
+  for (const p of confettiPool) scene.add(p.mesh)
+
   // ── Resize handler ───────────────────────────────────────────────────────────
   window.addEventListener('resize', () => {
     const w = window.innerWidth
@@ -737,6 +1141,13 @@ export function createScene(course: Course, theme: Theme): Scene3D {
   // Active juice state — null when no animation is running.
   let juice: JuiceState | null = null
 
+  // ── Landing-dust detection state ─────────────────────────────────────────────
+  // Vertical chassis velocity from the previous frame, so detectLanding() can
+  // compare it against this frame's. Seconds remaining before another landing
+  // puff is allowed (see LANDING_COOLDOWN_SEC).
+  let prevChassisVelY = 0
+  let dustCooldown = 0
+
   return {
     sync(vehicle: Vehicle): void {
       const dtSec = clock.getDelta()
@@ -754,6 +1165,8 @@ export function createScene(course: Course, theme: Theme): Scene3D {
       // ── Wheels ────────────────────────────────────────────────────────────
       let rearWheelX = 0
       let rearWheelY = 0
+      let frontWheelX = 0
+      let frontWheelY = 0
       for (let i = 0; i < 2; i++) {
         const wt = vehicle.wheels[i].translation()
         const wr = vehicle.wheels[i].rotation()
@@ -762,15 +1175,69 @@ export function createScene(course: Course, theme: Theme): Scene3D {
         wm.position.set(wt.x - ct.x, wt.y - ct.y, WHEEL_Z)
         wm.rotation.z = wr
         if (i === 0) {
-          // wheels[0] is the rear wheel — remember its world position for sparks.
+          // wheels[0] is the rear wheel — remember its world position for
+          // sparks/dust/splash.
           rearWheelX = wt.x
           rearWheelY = wt.y
+        } else {
+          // wheels[1] is the front wheel — remember it for dust/splash too.
+          frontWheelX = wt.x
+          frontWheelY = wt.y
         }
       }
 
       // ── Max-speed sparks ────────────────────────────────────────────────────
       const forwardSpeed = vehicle.chassis.linvel().x
       updateSparks(sparks, forwardSpeed, rearWheelX, rearWheelY, dtSec)
+
+      // ── Landing dust ─────────────────────────────────────────────────────────
+      const chassisVelY = vehicle.chassis.linvel().y
+      dustCooldown -= dtSec
+      if (dustCooldown <= 0 && detectLanding(prevChassisVelY, chassisVelY)) {
+        const halfBurst = Math.floor(DUST_BURST_COUNT / 2)
+        spawnRadialBurst(
+          dustPool,
+          halfBurst,
+          rearWheelX,
+          rearWheelY + WHEEL_CONTACT_OFFSET_Y,
+          DUST_Z,
+          DUST_SPEED_MIN,
+          DUST_SPEED_MAX,
+          DUST_UPWARD_BIAS,
+          DUST_LIFETIME_MIN,
+          DUST_LIFETIME_MAX,
+          DUST_SIZE_MIN,
+          DUST_SIZE_MAX,
+        )
+        spawnRadialBurst(
+          dustPool,
+          DUST_BURST_COUNT - halfBurst,
+          frontWheelX,
+          frontWheelY + WHEEL_CONTACT_OFFSET_Y,
+          DUST_Z,
+          DUST_SPEED_MIN,
+          DUST_SPEED_MAX,
+          DUST_UPWARD_BIAS,
+          DUST_LIFETIME_MIN,
+          DUST_LIFETIME_MAX,
+          DUST_SIZE_MIN,
+          DUST_SIZE_MAX,
+        )
+        dustCooldown = LANDING_COOLDOWN_SEC
+      }
+      prevChassisVelY = chassisVelY
+      integrateParticlePool(dustPool, dtSec, DUST_GRAVITY)
+
+      // ── Water splash ────────────────────────────────────────────────────────
+      const overWater = zoneAt(course, ct.x)?.kind === 'water'
+      const splashActive = overWater && Math.abs(forwardSpeed) > SPLASH_MIN_SPEED
+      updateSplash(splashPool, splashActive, [rearWheelX, frontWheelX], [rearWheelY, frontWheelY], dtSec)
+
+      // ── Endless checkpoint / medal celebration integration ──────────────────
+      // Spawning itself happens on demand (see checkpointBurst/medalCelebration
+      // below); every live particle still needs integrating each frame.
+      integrateParticlePool(checkpointPool, dtSec, CHECKPOINT_GRAVITY)
+      integrateParticlePool(confettiPool, dtSec, CONFETTI_GRAVITY)
 
       // ── Shape morph detection ──────────────────────────────────────────────
       const shape = vehicle.currentShape()
@@ -881,6 +1348,44 @@ export function createScene(course: Course, theme: Theme): Scene3D {
 
     render(): void {
       renderer.render(scene, camera)
+    },
+
+    checkpointBurst(x: number, y: number): void {
+      spawnRadialBurst(
+        checkpointPool,
+        CHECKPOINT_POOL_SIZE,
+        x,
+        y + CHECKPOINT_Y_OFFSET,
+        CHECKPOINT_Z,
+        CHECKPOINT_SPEED_MIN,
+        CHECKPOINT_SPEED_MAX,
+        CHECKPOINT_UPWARD_BIAS,
+        CHECKPOINT_LIFETIME_MIN,
+        CHECKPOINT_LIFETIME_MAX,
+        CHECKPOINT_SIZE_MIN,
+        CHECKPOINT_SIZE_MAX,
+      )
+    },
+
+    medalCelebration(medal: Medal, x: number, y: number): void {
+      const count = confettiCountForMedal(medal)
+      if (count <= 0) return
+      const colors = CONFETTI_COLORS_BY_MEDAL[medal]
+      spawnRadialBurst(
+        confettiPool,
+        count,
+        x,
+        y + CONFETTI_Y_OFFSET,
+        CONFETTI_Z,
+        CONFETTI_SPEED_MIN,
+        CONFETTI_SPEED_MAX,
+        CONFETTI_UPWARD_BIAS,
+        CONFETTI_LIFETIME_MIN,
+        CONFETTI_LIFETIME_MAX,
+        CONFETTI_SIZE_MIN,
+        CONFETTI_SIZE_MAX,
+        (i) => colors[i % colors.length],
+      )
     },
   }
 }
