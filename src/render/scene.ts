@@ -142,6 +142,9 @@ export interface Scene3D {
 
 interface VehicleMeshes {
   group: THREE.Group
+  /** Sub-group holding chassis + monigote; rotated by the chassis angle so the
+   *  rider tilts with the car. Wheels stay direct children of `group`. */
+  body: THREE.Group
   chassis: THREE.Mesh
   wheels: THREE.Mesh[]
   /** Per-wheel spin-marker spokes (children of the wheels); circle-only. */
@@ -258,10 +261,10 @@ export function createScene(course: Course): Scene3D {
       const cr = vehicle.chassis.rotation()
 
       // Keep the group at the chassis world position so all children move
-      // together; the chassis mesh itself sits at the group-local origin.
+      // together; the chassis + monigote sub-group tilts with the car angle,
+      // while the wheels (below) are world-positioned independently.
       vehicleMeshes.group.position.set(ct.x, ct.y, 0)
-      vehicleMeshes.chassis.position.set(0, 0, CHASSIS_Z)
-      vehicleMeshes.chassis.rotation.z = cr
+      vehicleMeshes.body.rotation.z = cr
 
       // ── Wheels ────────────────────────────────────────────────────────────
       for (let i = 0; i < 2; i++) {
@@ -373,12 +376,17 @@ export function createScene(course: Course): Scene3D {
 function buildVehicleMeshes(): VehicleMeshes {
   const group = new THREE.Group()
 
+  // Chassis + monigote live in this sub-group so they tilt together with the
+  // car's angle; wheels stay direct children of `group` (world-positioned).
+  const body = new THREE.Group()
+  group.add(body)
+
   // ── Chassis ──────────────────────────────────────────────────────────────
   const chassisGeo = new THREE.BoxGeometry(CHASSIS_HALF_W * 2, CHASSIS_HALF_H * 2, 1.2)
   const chassisMat = new THREE.MeshLambertMaterial({ color: 0xe74c3c }) // red
   const chassis = new THREE.Mesh(chassisGeo, chassisMat)
   chassis.position.set(0, 0, CHASSIS_Z)
-  group.add(chassis)
+  body.add(chassis)
 
   // ── Wheels ───────────────────────────────────────────────────────────────
   // Start as circle wheels; geometry and color are swapped in sync() when
@@ -410,7 +418,7 @@ function buildVehicleMeshes(): VehicleMeshes {
   const monigoteBody = new THREE.Mesh(bodyGeo, bodyMat)
   // Seat on top of chassis (chassis top edge = CHASSIS_HALF_H)
   monigoteBody.position.set(0, CHASSIS_HALF_H + BODY_HALF_H, MONIGOTE_Z)
-  group.add(monigoteBody)
+  body.add(monigoteBody)
 
   // ── Monigote head ─────────────────────────────────────────────────────────
   const headGeo = new THREE.SphereGeometry(HEAD_RADIUS, 8, 6)
@@ -418,7 +426,7 @@ function buildVehicleMeshes(): VehicleMeshes {
   const monigoteHead = new THREE.Mesh(headGeo, headMat)
   // Sits on top of the body
   monigoteHead.position.set(0, CHASSIS_HALF_H + BODY_HALF_H * 2 + HEAD_RADIUS, MONIGOTE_Z)
-  group.add(monigoteHead)
+  body.add(monigoteHead)
 
-  return { group, chassis, wheels, spokes, monigoteBody, monigoteHead }
+  return { group, body, chassis, wheels, spokes, monigoteBody, monigoteHead }
 }
