@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/Endika/gurpil/compare/v0.8.0...v0.8.1) (2026-07-08)
+
+
+### Bug Fixes
+
+* **pwa:** add favicon links so the tab icon loads ([9d9efa1](https://github.com/Endika/gurpil/commit/9d9efa19db6f586b3397c23e79eeb82012b830ce))
+
 ## [0.8.0](https://github.com/Endika/gurpil/compare/v0.7.0...v0.8.0) (2026-07-08)
 
 
