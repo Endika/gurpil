@@ -16,8 +16,10 @@ import {
   buildCanonicalCourse,
   generateCourse,
   zoneAt,
+  DIFFICULTY_TIERS,
   type Course,
   type Difficulty,
+  type DifficultyTier,
   type TerrainKind,
 } from '../../src/core/course'
 import { createWorld } from '../../src/physics/world'
@@ -25,6 +27,9 @@ import { createVehicle } from '../../src/physics/vehicle'
 import type { ShapeId } from '../../src/core/shapes'
 
 const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard']
+
+/** All five difficulty tiers, easiest → hardest (beginner … expert). */
+const ALL_TIERS: readonly DifficultyTier[] = DIFFICULTY_TIERS
 
 // Known friction tiers the generator may emit (base / mud / ice / uphill).
 const VALID_FRICTIONS = new Set([0.6, 1.2, 0.15, 0.1])
@@ -175,7 +180,7 @@ describe('buildCanonicalCourse — obstacle variant', () => {
 
 // ─── Difficulty monotonicity (averaged over many seeds) ───────────────────────
 
-function avgOver(difficulty: Difficulty, seeds: number, fn: (c: Course) => number): number {
+function avgOver(difficulty: DifficultyTier, seeds: number, fn: (c: Course) => number): number {
   let sum = 0
   for (let seed = 0; seed < seeds; seed++) sum += fn(generateCourse({ difficulty, seed }))
   return sum / seeds
@@ -206,6 +211,33 @@ describe('generateCourse — difficulty monotonicity', () => {
 
   it('hard has steeper/taller hills than easy (on average max height)', () => {
     expect(avgOver('hard', SEEDS, maxY)).toBeGreaterThan(avgOver('easy', SEEDS, maxY))
+  })
+
+  // ── Extended tiers: beginner is gentler than easy; expert harder than hard ──
+
+  it('beginner is shorter than easy (on average length)', () => {
+    expect(avgOver('beginner', SEEDS, totalLen)).toBeLessThan(avgOver('easy', SEEDS, totalLen))
+  })
+
+  it('expert is longer than hard (on average length)', () => {
+    expect(avgOver('expert', SEEDS, totalLen)).toBeGreaterThan(avgOver('hard', SEEDS, totalLen))
+  })
+
+  it('length is non-decreasing across all five tiers (beginner→expert)', () => {
+    const lens = ALL_TIERS.map((t) => avgOver(t, SEEDS, totalLen))
+    for (let i = 1; i < lens.length; i++) {
+      expect(lens[i]).toBeGreaterThan(lens[i - 1])
+    }
+  })
+
+  it('beginner has fewer eggs than easy; expert more than hard (on average)', () => {
+    expect(avgOver('beginner', SEEDS, eggCount)).toBeLessThan(avgOver('easy', SEEDS, eggCount))
+    expect(avgOver('expert', SEEDS, eggCount)).toBeGreaterThan(avgOver('hard', SEEDS, eggCount))
+  })
+
+  it('expert has taller hills than hard; beginner flatter than easy (avg max height)', () => {
+    expect(avgOver('expert', SEEDS, maxY)).toBeGreaterThan(avgOver('hard', SEEDS, maxY))
+    expect(avgOver('beginner', SEEDS, maxY)).toBeLessThan(avgOver('easy', SEEDS, maxY))
   })
 })
 
@@ -301,7 +333,9 @@ describe('generateCourse — completability (real engine)', () => {
     await RAPIER.init()
   })
 
-  for (const difficulty of DIFFICULTIES) {
+  // All FIVE tiers (beginner … expert) must be clearable with the right shape
+  // sequence — the extended tiers stay within the tuned completability ceilings.
+  for (const difficulty of ALL_TIERS) {
     for (const seed of [1, 2]) {
       it(`${difficulty} seed=${seed} is completable with the right shape sequence`, async () => {
         const course = generateCourse({ difficulty, seed })
@@ -312,4 +346,19 @@ describe('generateCourse — completability (real engine)', () => {
       }, 60000)
     }
   }
+})
+
+// ─── Extended-tier determinism (beginner / expert) ────────────────────────────
+
+describe('generateCourse — extended-tier determinism', () => {
+  it('same {tier, seed} → byte-identical track for beginner and expert', () => {
+    for (const difficulty of ['beginner', 'expert'] as const) {
+      const a = generateCourse({ difficulty, seed: 12345 })
+      const b = generateCourse({ difficulty, seed: 12345 })
+      expect(a.finishX).toBe(b.finishX)
+      expect(a.ground).toEqual(b.ground)
+      expect(a.obstacles).toEqual(b.obstacles)
+      expect(a.zones).toEqual(b.zones)
+    }
+  })
 })

@@ -57,10 +57,38 @@ export interface Course {
   zones: Zone[]
 }
 
+/**
+ * The three difficulty tiers offered by the Stage-1 difficulty-select MENU.
+ * Kept exactly as-is so the existing UI (`difficultySelect`, `pendingRace`) and
+ * the per-difficulty records API stay valid without change.
+ */
 export type Difficulty = 'easy' | 'medium' | 'hard'
 
+/**
+ * The FULL set of five course difficulty tiers, easiest → hardest, used by the
+ * generator, the campaign and the per-level records. It ADDS a gentler
+ * `'beginner'` below `'easy'` and a harder `'expert'` above `'hard'`, while
+ * keeping the three menu tiers unchanged (`Difficulty` ⊂ `DifficultyTier`, so
+ * every existing caller that passes a `Difficulty` still type-checks).
+ *
+ * (Named separately from `Difficulty` on purpose: the Stage-1 UI hard-codes a
+ * `Record<Difficulty, …>` over exactly the three menu tiers, so widening the
+ * `Difficulty` symbol itself would break that UI — out of scope for this core
+ * stage. 2b will wire the extra tiers into the UI.)
+ */
+export type DifficultyTier = 'beginner' | Difficulty | 'expert'
+
+/** All five difficulty tiers in easiest→hardest order (single source of truth). */
+export const DIFFICULTY_TIERS: readonly DifficultyTier[] = [
+  'beginner',
+  'easy',
+  'medium',
+  'hard',
+  'expert',
+]
+
 export interface CourseOptions {
-  difficulty: Difficulty
+  difficulty: DifficultyTier
   seed: number
 }
 
@@ -387,7 +415,22 @@ interface DifficultyParams {
   eggCount: [number, number]
 }
 
-export const DIFFICULTY_PARAMS: Record<Difficulty, DifficultyParams> = {
+export const DIFFICULTY_PARAMS: Record<DifficultyTier, DifficultyParams> = {
+  beginner: {
+    // Gentler than easy on every monotonic metric: fewer/shorter hazards,
+    // flatter hills, smaller bumps, fewer eggs. No ice (like easy).
+    flatStartLen: 20,
+    flatEndLen: 20,
+    hazardCount: [1, 2],
+    hazards: ['rocky', 'uphill', 'mud', 'eggs'],
+    hillGrade: [0.2, 0.3],
+    hillLen: [18, 30],
+    rockyAmp: [0.2, 0.35],
+    rockyLen: [14, 22],
+    mudLen: [14, 22],
+    iceLen: [14, 22],
+    eggCount: [2, 3],
+  },
   easy: {
     flatStartLen: 20,
     flatEndLen: 20,
@@ -426,6 +469,25 @@ export const DIFFICULTY_PARAMS: Record<Difficulty, DifficultyParams> = {
     mudLen: [40, 58],
     iceLen: [40, 58],
     eggCount: [6, 9],
+  },
+  expert: {
+    // Harder than hard on every monotonic metric: more/longer hazards, taller
+    // hills (longer up-and-over at the steepest allowed grade → higher peak),
+    // more eggs. Steepness stays AT the completable ceiling (hillGrade clamped
+    // to UPHILL_MAX_GRADE = 0.5; rocky slope still bounded by ROCKY_MAX_SLOPE
+    // via the auto-derived period; eggs still at the canonical EGG_SPACING), so
+    // an expert track is always clearable with the right sequence of shapes.
+    flatStartLen: 20,
+    flatEndLen: 20,
+    hazardCount: [7, 9],
+    hazards: ['rocky', 'uphill', 'mud', 'ice', 'eggs'],
+    hillGrade: [0.47, 0.5],
+    hillLen: [70, 110],
+    rockyAmp: [0.58, 0.66],
+    rockyLen: [34, 52],
+    mudLen: [46, 66],
+    iceLen: [46, 66],
+    eggCount: [8, 12],
   },
 }
 
