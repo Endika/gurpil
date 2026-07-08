@@ -241,6 +241,7 @@ export function createScene(course: Course): Scene3D {
 
   // ── Camera x state (lerp target) ─────────────────────────────────────────────
   let camX = course.startX
+  let camY = CAM_Y_OFFSET
 
   // ── Shape swap tracking ───────────────────────────────────────────────────────
   // Track which shape is currently displayed so we can detect a swap each frame.
@@ -352,9 +353,13 @@ export function createScene(course: Course): Scene3D {
       // creation time and don't change (they ride the chassis group).
 
       // ── Camera follow ─────────────────────────────────────────────────────
+      // Follow the car in BOTH axes (smooth lerp) so it stays framed on steep
+      // climbs — otherwise a tall uphill carries the car out of the top of view.
       camX += (ct.x - camX) * CAM_LERP
+      camY += (ct.y + CAM_Y_OFFSET - camY) * CAM_LERP
       camera.position.x = camX
-      camera.lookAt(camX, CAM_Y_OFFSET, 0)
+      camera.position.y = camY
+      camera.lookAt(camX, camY, 0)
     },
 
     render(): void {
