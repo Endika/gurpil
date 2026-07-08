@@ -134,44 +134,51 @@ const GRIP_RADIUS = HANDLEBAR_HALF_H * 2
 // handles; everything else here (eyes, belly, arms, feet) is decoration
 // parented to them or to `body`.
 
-/** Bright saturated body color. */
-const BLOB_BODY_COLOR = 0x5ec8d8
-/** Lighter belly-patch color. */
-const BLOB_BELLY_COLOR = 0xcdf3f7
-/** Eyes + mouth color — reuses the scooter trim color so rider and scooter
- *  read as one cohesive palette. */
-const BLOB_EYE_COLOR = SCOOTER_TRIM_COLOR
+/** Bright saturated body color — sunny yellow, Fall-Guys-bean style. */
+const BLOB_BODY_COLOR = 0xffd23f
+/** Lighter (near-white, warm) belly-patch color. */
+const BLOB_BELLY_COLOR = 0xfff8e7
+/** Eyes + mouth color — dedicated near-black so the eyes pop against the
+ *  bright body (rather than reusing the scooter's dark navy trim). */
+const BLOB_EYE_COLOR = 0x1b1b1f
 /** Tiny specular highlight dot on each eye. */
 const BLOB_HIGHLIGHT_COLOR = 0xffffff
 
-/** Slightly glossy finish shared by all blob parts (see MeshStandardMaterial). */
-const BLOB_ROUGHNESS = 0.35
+/** Glossy finish shared by all blob parts (see MeshStandardMaterial) — reads as the reference's smooth, wet-look sheen. */
+const BLOB_ROUGHNESS = 0.3
 /** Eyes are glossier than the body/belly — reads as a wet, glassy highlight. */
 const EYE_ROUGHNESS = 0.15
 const BLOB_METALNESS = 0
 
-/**
- * Overlap depth (metres) used so decoration meshes (head into body, etc.)
- * sink slightly into their parent instead of touching it edge-on — avoids
- * visible seams.
- */
-const BLOB_EMBED = 0.03
-
-/** Head radius (metres) — big relative to the body for a cute mascot look. */
-const HEAD_RADIUS = 0.34
-
-/** Body: an upright capsule (rounded "bean" torso). */
-const BLOB_BODY_RADIUS = 0.3
-const BLOB_BODY_LENGTH = 0.22
-const BLOB_CAP_SEGMENTS = 4
-const BLOB_RADIAL_SEGMENTS = 10
+/** Body: a big, plump upright capsule — short length relative to its radius so
+ *  it reads as a fat rounded "bean" rather than an elongated pill. */
+const BLOB_BODY_RADIUS = 0.46
+const BLOB_BODY_LENGTH = 0.12
+const BLOB_CAP_SEGMENTS = 6
+const BLOB_RADIAL_SEGMENTS = 14
 /** Stands toward the rear-middle of the deck, leaving the stem clear at the front. */
 const BLOB_BODY_OFFSET_X = -CHASSIS_HALF_W * 0.3
 const BLOB_BODY_OFFSET_Y = STEM_BASE_Y + BLOB_BODY_LENGTH / 2 + BLOB_BODY_RADIUS
 
-/** Head sits on top of the body, sunk in slightly to avoid a seam. */
+/**
+ * Head radius (metres) — a fixed fraction of the body radius (~80% of its
+ * width) so head and torso read as one continuous bean rather than a small
+ * head on a separate body.
+ */
+const HEAD_RADIUS = BLOB_BODY_RADIUS * 0.8
+/** Head sphere smoothness — a bigger sphere needs more segments to stay round. */
+const HEAD_WIDTH_SEGMENTS = 16
+const HEAD_HEIGHT_SEGMENTS = 12
+
+/**
+ * How far the head sinks into the body's top (metres) — deep enough that the
+ * two meshes fuse into a single silhouette with no visible neck gap.
+ */
+const HEAD_EMBED = HEAD_RADIUS * 0.5
+
+/** Head sits directly on top of the body, sunk in deeply to erase the neck. */
 const BLOB_HEAD_OFFSET_Y =
-  BLOB_BODY_OFFSET_Y + BLOB_BODY_LENGTH / 2 + BLOB_BODY_RADIUS + HEAD_RADIUS - BLOB_EMBED
+  BLOB_BODY_OFFSET_Y + BLOB_BODY_LENGTH / 2 + BLOB_BODY_RADIUS + HEAD_RADIUS - HEAD_EMBED
 
 /** Belly: a flattened patch on the camera-facing side of the body. */
 const BELLY_RADIUS = BLOB_BODY_RADIUS * 0.65
@@ -180,10 +187,11 @@ const BELLY_FLATTEN = 0.35
 const BELLY_OFFSET_Z = BLOB_BODY_RADIUS * 0.85
 const BELLY_OFFSET_Y = BLOB_BODY_OFFSET_Y - BLOB_BODY_RADIUS * 0.1
 
-/** Eyes: two big glossy spheres on the camera-facing side of the head. */
-const EYE_RADIUS = HEAD_RADIUS * 0.26
+/** Eyes: two big glossy spheres on the camera-facing side of the head — sized
+ *  to be clearly readable, placed high on the face and spaced apart. */
+const EYE_RADIUS = HEAD_RADIUS * 0.32
 const EYE_OFFSET_X = HEAD_RADIUS * 0.42
-const EYE_OFFSET_Y = HEAD_RADIUS * 0.08
+const EYE_OFFSET_Y = HEAD_RADIUS * 0.15
 const EYE_OFFSET_Z = HEAD_RADIUS * 0.88
 
 /** Highlight dot: tiny bright sphere offset toward the light on each eye. */
@@ -199,9 +207,11 @@ const MOUTH_ARC = Math.PI * 0.55
 const MOUTH_OFFSET_Y = -HEAD_RADIUS * 0.28
 const MOUTH_OFFSET_Z = HEAD_RADIUS * 0.9
 
-/** Stub arms reach forward from the shoulders toward the handlebar. */
-const ARM_RADIUS = 0.07
-const ARM_LENGTH = 0.26
+/** Stub arms reach forward from the shoulders toward the handlebar — kept
+ *  small (fractions of the body radius) so they stay tiny stubs even as the
+ *  body grows. */
+const ARM_RADIUS = BLOB_BODY_RADIUS * 0.18
+const ARM_LENGTH = BLOB_BODY_RADIUS * 0.5
 const ARM_CAP_SEGMENTS = 4
 const ARM_RADIAL_SEGMENTS = 6
 const ARM_TILT = -0.4 // radians; tilts the stub from vertical toward the (raised) handlebar
@@ -209,8 +219,9 @@ const ARM_OFFSET_X = BLOB_BODY_OFFSET_X + BLOB_BODY_RADIUS * 0.6
 const ARM_OFFSET_Y = BLOB_BODY_OFFSET_Y + BLOB_BODY_LENGTH / 2
 const ARM_Z_OFFSET = BLOB_BODY_RADIUS * 0.8
 
-/** Tiny feet: flattened spheres resting on the deck under the body. */
-const FOOT_RADIUS = 0.12
+/** Tiny feet: flattened spheres resting on the deck under the body — sized as
+ *  a fraction of the body radius so they stay tiny stubs. */
+const FOOT_RADIUS = BLOB_BODY_RADIUS * 0.28
 /** Scale applied to the foot sphere's y-extent so it reads as a squashed pad. */
 const FOOT_FLATTEN = 0.55
 const FOOT_OFFSET_X = BLOB_BODY_OFFSET_X
@@ -638,7 +649,7 @@ function buildVehicleMeshes(): VehicleMeshes {
   // ── Blob head + face ─────────────────────────────────────────────────────
   // Reuses bodyMat: mascots like this read as a single-color bean with only
   // the belly patch lighter, so the head shares the body's color and finish.
-  const headGeo = new THREE.SphereGeometry(HEAD_RADIUS, 10, 8)
+  const headGeo = new THREE.SphereGeometry(HEAD_RADIUS, HEAD_WIDTH_SEGMENTS, HEAD_HEIGHT_SEGMENTS)
   const monigoteHead = new THREE.Mesh(headGeo, bodyMat)
   // Sits on top of the body, sunk in slightly to avoid a visible seam.
   monigoteHead.position.set(BLOB_BODY_OFFSET_X, BLOB_HEAD_OFFSET_Y, MONIGOTE_Z)
