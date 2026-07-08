@@ -13,7 +13,7 @@
  */
 
 import * as THREE from 'three'
-import type { Course, Obstacle } from '../core/course'
+import { zoneAt, type Course, type Obstacle, type TerrainKind } from '../core/course'
 import type { Point } from '../core/classifyStroke'
 import type { Theme } from '../core/theme'
 
@@ -157,9 +157,41 @@ const BACK_EDGE_BACKDROP_BLEND = 0.65
 // ─── Terrain color zones ──────────────────────────────────────────────────────
 
 /**
- * Color the terrain strip by x position to match the course zones, reading the
- * per-zone palette from the active `theme` (the single source of truth for
- * environment color — see core/theme.ts). Returns a hex color number.
+ * Color for a terrain zone KIND, reading the per-zone palette from the active
+ * `theme` (the single source of truth for environment color — see core/theme.ts).
+ * This is the zone-accurate path used for GENERATED courses (which interleave
+ * ramps / water / bridges in any order); `terrainColorAt` is the x-based
+ * approximation kept for the canonical layout. Returns a hex color number.
+ */
+export function terrainColorForKind(kind: TerrainKind, theme: Theme): number {
+  const t = theme.terrain
+  switch (kind) {
+    case 'flat':
+      return t.flat
+    case 'rocky':
+      return t.rocky
+    case 'uphill':
+      return t.uphill
+    case 'mud':
+      return t.mud
+    case 'ice':
+      return t.ice
+    case 'eggs':
+      return t.eggs
+    case 'ramp':
+      return t.ramp
+    case 'water':
+      return t.water
+    case 'bridge':
+      return t.bridge
+  }
+}
+
+/**
+ * Color the terrain strip by x position to match the CANONICAL course zones,
+ * reading the per-zone palette from the active `theme`. Kept for the canonical
+ * layout and as the fallback when no zone lookup is supplied to
+ * `buildTerrainStrip`. Returns a hex color number.
  */
 export function terrainColorAt(x: number, theme: Theme): number {
   const t = theme.terrain
@@ -185,7 +217,17 @@ export function terrainColorAt(x: number, theme: Theme): number {
  *
  * This function is pure (no Three.js constructors) and is exported for testing.
  */
-export function buildTerrainStrip(ground: Point[], theme: Theme): {
+export function buildTerrainStrip(
+  ground: Point[],
+  theme: Theme,
+  /**
+   * Optional zone-KIND lookup by x. When supplied (generated courses), each point
+   * is colored by its ACTUAL zone kind via `terrainColorForKind` — so interleaved
+   * ramps / water / bridges get their themed color. When omitted (canonical /
+   * unit tests), coloring falls back to the x-based `terrainColorAt`.
+   */
+  zoneKindAt?: (x: number) => TerrainKind | undefined,
+): {
   positions: Float32Array
   colors: Float32Array
   indices: Uint32Array
@@ -252,7 +294,9 @@ export function buildTerrainStrip(ground: Point[], theme: Theme): {
     positions[pi + 13] = y - APRON_DROP
     positions[pi + 14] = zApron
 
-    const col = new THREE.Color(terrainColorAt(x, theme))
+    const kind = zoneKindAt?.(x)
+    const colorHex = kind !== undefined ? terrainColorForKind(kind, theme) : terrainColorAt(x, theme)
+    const col = new THREE.Color(colorHex)
     // Back-edge verts (top-back, bot-back) blend toward the ground backdrop's
     // color so the top face fades into it across the strip's depth instead of
     // meeting it in a hard, single-color line at TERRAIN_BACK_Z (see
@@ -390,7 +434,13 @@ function buildRockMesh(seedX: number, theme: Theme): THREE.Mesh {
  * Returns a THREE.Mesh using vertex colors for zone tinting.
  */
 export function buildTerrainMesh(course: Course, theme: Theme): THREE.Mesh {
-  const { positions, colors, indices } = buildTerrainStrip(course.ground, theme)
+  // Color by the ACTUAL zone kind at each x so generated courses (which interleave
+  // ramps / water / bridges in any order) get their themed colors.
+  const { positions, colors, indices } = buildTerrainStrip(
+    course.ground,
+    theme,
+    (x) => zoneAt(course, x)?.kind,
+  )
 
   const geo = new THREE.BufferGeometry()
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))

@@ -22,7 +22,20 @@ import type { Point } from './classifyStroke'
 
 // ─── Public types ──────────────────────────────────────────────────────────────
 
-export type TerrainKind = 'flat' | 'rocky' | 'uphill' | 'mud' | 'ice' | 'eggs'
+export type TerrainKind =
+  | 'flat'
+  | 'rocky'
+  | 'uphill'
+  | 'mud'
+  | 'ice'
+  | 'eggs'
+  // ── Stage-3 terrain-variety features (all traversable ground) ──
+  /** Up-and-over kicker: a grippy launch ramp with a generous flat landing. */
+  | 'ramp'
+  /** A flat, slippery/slow water crossing (a ford at road level — never a pit). */
+  | 'water'
+  /** A flat, solid wooden bridge span over a decorative dip. */
+  | 'bridge'
 
 /** Visual style of an obstacle. Purely cosmetic — the collider (a fixed-radius
  *  ball, see `physics/world.ts`) and gameplay are IDENTICAL for every variant;
@@ -145,6 +158,63 @@ const ROCKY_MAX_SLOPE = 0.47
 const EGG_SPACING = 5
 const EGG_LEAD_IN = 15
 const EGG_TRAIL = 10
+
+// ─── Stage-3 terrain-variety feature constants ────────────────────────────────
+//
+// JUMP RAMP, WATER and BRIDGE. Every one is TRAVERSABLE GROUND that begins AND
+// ends at BASE_Y, so they compose in any random order exactly like the existing
+// zones. Their parameters are bounded by known-safe ceilings (below) so every
+// generated track stays completable — proven headless by the real-Rapier
+// completability tests.
+
+/**
+ * Friction of the WATER crossing surface — slippery/slow (between ice and base).
+ * The water is a FLAT ford at road level (BASE_Y, see waterZone): being flat it
+ * needs no grip to drive across, so even the low-grip shapes cross it; the low
+ * friction only makes it feel loose/slow, never a trap. Modelled flat (not a
+ * recessed basin) ON PURPOSE — a flat ford can never be a pit you fall into and
+ * get stuck, which is the overriding completability requirement.
+ */
+const FRICTION_WATER = 0.3
+
+/**
+ * Friction of the BRIDGE deck — the same base grip as flat ground. The bridge is
+ * purely a themed, SOLID flat span (see bridgeZone): zero dead-end risk.
+ */
+const FRICTION_BRIDGE = FRICTION_BASE
+
+/**
+ * Friction of the JUMP-RAMP surface — deliberately GRIPPY (base grip), NOT the
+ * slippery FRICTION_UPHILL. The ramp is a launch feature, not a grip gate: every
+ * shape must be able to climb it and get over. With base grip the low-grip circle
+ * still climbs ((0.55 + 0.6)/2 = 0.575 > RAMP_UP_GRADE), so the ramp never
+ * becomes an accidental wall — it always launches or is simply driven over.
+ */
+const FRICTION_RAMP = FRICTION_BASE
+
+/**
+ * Up-slope grade of the ramp take-off face (rise/run). ≤ UPHILL_MAX_GRADE (0.5)
+ * so it is always climbable, and grippy (FRICTION_RAMP) so EVERY shape summits it
+ * from speed. The convex peak between the up face and the steeper down face is
+ * the launch point: a fast shape flies off it (fun air), a slow one simply rolls
+ * down the far side — either way it continues onto the flat landing.
+ */
+const RAMP_UP_GRADE = 0.4
+
+/**
+ * Down-slope grade of the ramp's launch face (rise/run). Steeper than the up face
+ * for a snappier kick, but still a SLOPE (never a vertical edge), so a shape that
+ * doesn't launch just rolls down it — no mini-cliff, no wedge.
+ */
+const RAMP_DOWN_GRADE = 0.6
+
+/**
+ * Flat landing run after the ramp (metres). Long and level so the vehicle lands
+ * on solid ground and recovers well before the zone ends; and because every zone
+ * ends at BASE_Y, whatever follows is also solid ground at road level — there is
+ * never a gap to overshoot into.
+ */
+const RAMP_LAND_RUN = 24
 
 /**
  * Sample points per unit x for STRAIGHT segments (flat / linear ramps). One per
@@ -413,6 +483,14 @@ interface DifficultyParams {
   iceLen: [number, number]
   /** Number of eggs in an eggs zone (inclusive range). */
   eggCount: [number, number]
+  /** Jump-ramp peak height range (metres). Height drives the up/down run lengths
+   *  at the fixed RAMP_UP_GRADE/RAMP_DOWN_GRADE, so a taller ramp is a longer,
+   *  bigger jump — never a steeper (uncompletable) one. */
+  rampHeight: [number, number]
+  /** Water (ford) crossing length range (metres). */
+  waterLen: [number, number]
+  /** Bridge span length range (metres). */
+  bridgeLen: [number, number]
 }
 
 export const DIFFICULTY_PARAMS: Record<DifficultyTier, DifficultyParams> = {
@@ -422,7 +500,9 @@ export const DIFFICULTY_PARAMS: Record<DifficultyTier, DifficultyParams> = {
     flatStartLen: 20,
     flatEndLen: 20,
     hazardCount: [1, 2],
-    hazards: ['rocky', 'uphill', 'mud', 'eggs'],
+    // Gentle features only (bridge + water); NO ramps at the beginner tier so
+    // beginner tracks stay the flattest (keeps the max-height monotonicity clean).
+    hazards: ['rocky', 'uphill', 'mud', 'eggs', 'bridge', 'water'],
     hillGrade: [0.2, 0.3],
     hillLen: [18, 30],
     rockyAmp: [0.2, 0.35],
@@ -430,12 +510,15 @@ export const DIFFICULTY_PARAMS: Record<DifficultyTier, DifficultyParams> = {
     mudLen: [14, 22],
     iceLen: [14, 22],
     eggCount: [2, 3],
+    rampHeight: [2, 2.5],
+    waterLen: [12, 18],
+    bridgeLen: [12, 18],
   },
   easy: {
     flatStartLen: 20,
     flatEndLen: 20,
     hazardCount: [2, 3],
-    hazards: ['rocky', 'uphill', 'mud', 'eggs'],
+    hazards: ['rocky', 'uphill', 'mud', 'eggs', 'bridge', 'water', 'ramp'],
     hillGrade: [0.28, 0.4],
     hillLen: [24, 40],
     rockyAmp: [0.3, 0.45],
@@ -443,12 +526,15 @@ export const DIFFICULTY_PARAMS: Record<DifficultyTier, DifficultyParams> = {
     mudLen: [18, 28],
     iceLen: [18, 28],
     eggCount: [3, 4],
+    rampHeight: [2, 3],
+    waterLen: [14, 20],
+    bridgeLen: [14, 20],
   },
   medium: {
     flatStartLen: 20,
     flatEndLen: 20,
     hazardCount: [3, 5],
-    hazards: ['rocky', 'uphill', 'mud', 'ice', 'eggs'],
+    hazards: ['rocky', 'uphill', 'mud', 'ice', 'eggs', 'bridge', 'water', 'ramp'],
     hillGrade: [0.38, 0.46],
     hillLen: [36, 64],
     rockyAmp: [0.4, 0.55],
@@ -456,12 +542,15 @@ export const DIFFICULTY_PARAMS: Record<DifficultyTier, DifficultyParams> = {
     mudLen: [28, 44],
     iceLen: [28, 44],
     eggCount: [4, 6],
+    rampHeight: [2.5, 4],
+    waterLen: [18, 26],
+    bridgeLen: [18, 26],
   },
   hard: {
     flatStartLen: 20,
     flatEndLen: 20,
     hazardCount: [5, 7],
-    hazards: ['rocky', 'uphill', 'mud', 'ice', 'eggs'],
+    hazards: ['rocky', 'uphill', 'mud', 'ice', 'eggs', 'bridge', 'water', 'ramp'],
     hillGrade: [0.44, 0.5],
     hillLen: [56, 90],
     rockyAmp: [0.5, 0.62],
@@ -469,6 +558,9 @@ export const DIFFICULTY_PARAMS: Record<DifficultyTier, DifficultyParams> = {
     mudLen: [40, 58],
     iceLen: [40, 58],
     eggCount: [6, 9],
+    rampHeight: [3.5, 5],
+    waterLen: [22, 32],
+    bridgeLen: [22, 32],
   },
   expert: {
     // Harder than hard on every monotonic metric: more/longer hazards, taller
@@ -480,7 +572,7 @@ export const DIFFICULTY_PARAMS: Record<DifficultyTier, DifficultyParams> = {
     flatStartLen: 20,
     flatEndLen: 20,
     hazardCount: [7, 9],
-    hazards: ['rocky', 'uphill', 'mud', 'ice', 'eggs'],
+    hazards: ['rocky', 'uphill', 'mud', 'ice', 'eggs', 'bridge', 'water', 'ramp'],
     hillGrade: [0.47, 0.5],
     hillLen: [70, 110],
     rockyAmp: [0.58, 0.66],
@@ -488,6 +580,9 @@ export const DIFFICULTY_PARAMS: Record<DifficultyTier, DifficultyParams> = {
     mudLen: [46, 66],
     iceLen: [46, 66],
     eggCount: [8, 12],
+    rampHeight: [4, 6],
+    waterLen: [26, 38],
+    bridgeLen: [26, 38],
   },
 }
 
@@ -581,6 +676,76 @@ function eggsZone(rng: Rng, xStart: number, p: DifficultyParams): BuiltZone {
   }
 }
 
+/**
+ * JUMP RAMP: an up-and-over kicker with a generous flat landing.
+ *
+ * Profile (all grippy FRICTION_RAMP ground, starting AND ending at BASE_Y):
+ *   1. up face:  BASE_Y → peak, at ≤ RAMP_UP_GRADE (climbable by every shape),
+ *   2. down face: peak → BASE_Y, steeper (RAMP_DOWN_GRADE) — the launch face,
+ *   3. landing:  a long flat run at BASE_Y (RAMP_LAND_RUN).
+ *
+ * The convex peak is the launch point: a fast shape flies off it for real air and
+ * lands on the flat landing; a slow shape just rolls down the far face onto the
+ * same landing. Either way it always continues — there is NEVER a gap (the zone,
+ * and whatever follows, are solid ground at BASE_Y). The runs are derived from
+ * the peak height at fixed grades, so a taller ramp is a BIGGER jump, never a
+ * steeper (uncompletable) one. `ceil` on each run keeps the actual grade ≤ its
+ * ceiling.
+ */
+function rampZone(rng: Rng, xStart: number, p: DifficultyParams): BuiltZone {
+  const height = randRange(rng, p.rampHeight[0], p.rampHeight[1])
+  const upRun = Math.ceil(height / RAMP_UP_GRADE)
+  const downRun = Math.ceil(height / RAMP_DOWN_GRADE)
+  const upGrade = height / upRun // ≤ RAMP_UP_GRADE (ceil rounded the run up)
+  const downGrade = height / downRun // ≤ RAMP_DOWN_GRADE
+  const len = upRun + downRun + RAMP_LAND_RUN
+  const xEnd = xStart + len
+  return {
+    seg: {
+      kind: 'ramp',
+      xStart,
+      xEnd,
+      friction: FRICTION_RAMP,
+      y: (x: number): number => {
+        const dx = x - xStart
+        if (dx <= upRun) return BASE_Y + dx * upGrade // up face → peak
+        if (dx <= upRun + downRun) return BASE_Y + height - (dx - upRun) * downGrade // launch face → BASE_Y
+        return BASE_Y // flat landing
+      },
+    },
+  }
+}
+
+/**
+ * WATER crossing: a FLAT, slippery ford at road level (BASE_Y).
+ *
+ * Modelled flat (not a recessed basin) on purpose: a flat ford can never be a pit
+ * you fall into and get stuck, which is the overriding completability rule. The
+ * low FRICTION_WATER makes it read as a loose/slow water crossing; because it is
+ * flat, even the low-grip shapes drive straight across it. Rendered blue (per
+ * theme) so it reads as water — see render/terrain.ts.
+ */
+function waterZone(rng: Rng, xStart: number, p: DifficultyParams): BuiltZone {
+  const len = Math.round(randRange(rng, p.waterLen[0], p.waterLen[1]))
+  return {
+    seg: { kind: 'water', xStart, xEnd: xStart + len, friction: FRICTION_WATER, y: () => BASE_Y },
+  }
+}
+
+/**
+ * BRIDGE: a flat, SOLID wooden span at road level (BASE_Y), base grip.
+ *
+ * Purely a themed variation of flat ground — the crossing itself is solid (no
+ * fall-through), so it carries zero dead-end risk. Rendered as a wooden deck (per
+ * theme) over a decorative dip — see render/terrain.ts.
+ */
+function bridgeZone(rng: Rng, xStart: number, p: DifficultyParams): BuiltZone {
+  const len = Math.round(randRange(rng, p.bridgeLen[0], p.bridgeLen[1]))
+  return {
+    seg: { kind: 'bridge', xStart, xEnd: xStart + len, friction: FRICTION_BRIDGE, y: () => BASE_Y },
+  }
+}
+
 function buildHazard(kind: TerrainKind, rng: Rng, xStart: number, p: DifficultyParams): BuiltZone {
   switch (kind) {
     case 'rocky':
@@ -593,6 +758,12 @@ function buildHazard(kind: TerrainKind, rng: Rng, xStart: number, p: DifficultyP
       return iceZone(rng, xStart, p)
     case 'eggs':
       return eggsZone(rng, xStart, p)
+    case 'ramp':
+      return rampZone(rng, xStart, p)
+    case 'water':
+      return waterZone(rng, xStart, p)
+    case 'bridge':
+      return bridgeZone(rng, xStart, p)
     case 'flat':
       return flatZone(xStart, Math.round(randRange(rng, p.mudLen[0], p.mudLen[1])))
   }

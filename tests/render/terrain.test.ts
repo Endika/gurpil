@@ -10,6 +10,7 @@ import { describe, it, expect } from 'vitest'
 import * as THREE from 'three'
 import {
   terrainColorAt,
+  terrainColorForKind,
   buildTerrainStrip,
   groundBackdropExtent,
   TERRAIN_FRONT_Z,
@@ -17,6 +18,7 @@ import {
   APRON_DROP,
 } from '../../src/render/terrain'
 import { THEMES } from '../../src/core/theme'
+import type { TerrainKind } from '../../src/core/course'
 
 // The grassland theme reproduces the pre-theme hardcoded palette, so these
 // zone-color assertions carry over unchanged.
@@ -56,6 +58,62 @@ describe('terrainColorAt', () => {
     const b = c & 0xff
     const r = (c >> 16) & 0xff
     expect(b).toBeGreaterThan(r)
+  })
+})
+
+describe('terrainColorForKind (zone-accurate, incl. Stage-3 features)', () => {
+  it('gives every terrain kind a distinct themed color', () => {
+    const kinds: TerrainKind[] = [
+      'flat',
+      'rocky',
+      'uphill',
+      'mud',
+      'ice',
+      'eggs',
+      'ramp',
+      'water',
+      'bridge',
+    ]
+    const colors = kinds.map((k) => terrainColorForKind(k, theme))
+    for (const c of colors) expect(c).toBeGreaterThan(0)
+    expect(new Set(colors).size).toBe(kinds.length)
+  })
+
+  it('water reads blue (B channel dominant) in every non-lava theme', () => {
+    for (const id of ['grassland', 'desert', 'snow', 'night'] as const) {
+      const c = terrainColorForKind('water', THEMES[id])
+      const b = c & 0xff
+      const r = (c >> 16) & 0xff
+      expect(b, `${id} water should be blue`).toBeGreaterThan(r)
+    }
+  })
+})
+
+describe('buildTerrainStrip — zone-kind coloring path', () => {
+  it('colors points by their ACTUAL zone kind when a lookup is supplied', () => {
+    const pts = [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+    ]
+    // Pretend the whole span is a water zone: the front-edge color must equal the
+    // themed water color, not the x-based flat color.
+    const { colors } = buildTerrainStrip(pts, theme, () => 'water')
+    const water = new THREE.Color(terrainColorForKind('water', theme))
+    expect(colors[0]).toBeCloseTo(water.r, 5)
+    expect(colors[1]).toBeCloseTo(water.g, 5)
+    expect(colors[2]).toBeCloseTo(water.b, 5)
+  })
+
+  it('falls back to the x-based color when no lookup is supplied', () => {
+    const pts = [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+    ]
+    const { colors } = buildTerrainStrip(pts, theme)
+    const flat = new THREE.Color(terrainColorAt(0, theme))
+    expect(colors[0]).toBeCloseTo(flat.r, 5)
+    expect(colors[1]).toBeCloseTo(flat.g, 5)
+    expect(colors[2]).toBeCloseTo(flat.b, 5)
   })
 })
 

@@ -31,8 +31,9 @@ const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard']
 /** All five difficulty tiers, easiest → hardest (beginner … expert). */
 const ALL_TIERS: readonly DifficultyTier[] = DIFFICULTY_TIERS
 
-// Known friction tiers the generator may emit (base / mud / ice / uphill).
-const VALID_FRICTIONS = new Set([0.6, 1.2, 0.15, 0.1])
+// Known friction tiers the generator may emit (base / mud / ice / uphill /
+// water). ramp + bridge reuse base grip (0.6); water adds its own slippery 0.3.
+const VALID_FRICTIONS = new Set([0.6, 1.2, 0.15, 0.1, 0.3])
 
 // ─── Structural invariants (generator) ────────────────────────────────────────
 
@@ -295,6 +296,12 @@ function idealShape(kind: TerrainKind): ShapeId {
     case 'mud':
     case 'ice':
       return 'triangle'
+    // The Stage-3 features are all traversable ground; the fast circle handles
+    // them well (grippy ramp it climbs and launches off, flat water/bridge it
+    // rolls straight across).
+    case 'ramp':
+    case 'water':
+    case 'bridge':
     case 'rocky':
     case 'flat':
     default:
@@ -346,6 +353,142 @@ describe('generateCourse — completability (real engine)', () => {
       }, 60000)
     }
   }
+})
+
+// ─── Stage-3 feature completability (real engine) ─────────────────────────────
+//
+// Directly proves the NEW features are clearable: for every tier that can place a
+// feature we find the first seed whose track actually CONTAINS it, then drive that
+// track start→finish on the real Rapier engine. A ramp launches and lands; a water
+// ford and a bridge are crossed — none is ever a dead-end or a pit.
+
+describe('generateCourse — Stage-3 feature completability (real engine)', () => {
+  beforeAll(async () => {
+    await RAPIER.init()
+  })
+
+  const rampTiers: DifficultyTier[] = ['easy', 'medium', 'hard', 'expert']
+
+  for (const kind of ['ramp', 'water', 'bridge'] as const) {
+    const tiers = kind === 'ramp' ? rampTiers : ALL_TIERS
+    for (const difficulty of tiers) {
+      it(`${difficulty}: a track containing a ${kind} is driven to the finish`, async () => {
+        let seed = -1
+        for (let s = 0; s < 200; s++) {
+          if (generateCourse({ difficulty, seed: s }).zones.some((z) => z.kind === kind)) {
+            seed = s
+            break
+          }
+        }
+        expect(seed, `no ${kind} found for ${difficulty}`).toBeGreaterThanOrEqual(0)
+        const course = generateCourse({ difficulty, seed })
+        const { maxX, finishX } = await driveToFinish(course)
+        expect(
+          maxX,
+          `${difficulty} seed=${seed} (with ${kind}) did not finish (maxX=${maxX.toFixed(1)}/${finishX})`,
+        ).toBeGreaterThanOrEqual(finishX - 3)
+      }, 60000)
+    }
+  }
+})
+
+// ─── Stage-3 terrain-variety features (ramp / water / bridge) ──────────────────
+//
+// New traversable-ground features added for variety. Every one begins AND ends at
+// the BASE_Y baseline (0) so it composes in any random order, and none is ever a
+// pit — proven structurally here and driven to the finish (real engine) below.
+
+const BASE_Y = 0
+
+/** Ground points strictly inside [zone.xStart, zone.xEnd]. */
+function pointsInZone(course: Course, zone: { xStart: number; xEnd: number }) {
+  return course.ground.filter((p) => p.x >= zone.xStart && p.x <= zone.xEnd)
+}
+
+/** First seed (0..limit) whose generated course contains a zone of `kind`. */
+function firstSeedWith(difficulty: DifficultyTier, kind: TerrainKind, limit = 200): number {
+  for (let seed = 0; seed < limit; seed++) {
+    if (generateCourse({ difficulty, seed }).zones.some((z) => z.kind === kind)) return seed
+  }
+  return -1
+}
+
+describe('generateCourse — Stage-3 features appear (difficulty-scaled)', () => {
+  it('water and bridge appear at every tier; ramps only from easy upward', () => {
+    for (const tier of ALL_TIERS) {
+      expect(firstSeedWith(tier, 'water'), `${tier} should place water`).toBeGreaterThanOrEqual(0)
+      expect(firstSeedWith(tier, 'bridge'), `${tier} should place bridges`).toBeGreaterThanOrEqual(0)
+    }
+    // Ramps are deliberately absent at beginner (keeps beginner the flattest tier).
+    expect(firstSeedWith('beginner', 'ramp')).toBe(-1)
+    for (const tier of ['easy', 'medium', 'hard', 'expert'] as const) {
+      expect(firstSeedWith(tier, 'ramp'), `${tier} should place ramps`).toBeGreaterThanOrEqual(0)
+    }
+  })
+
+  it('taller ramps on harder tiers (expert ramps peak higher than easy, on average)', () => {
+    const avgRampPeak = (tier: DifficultyTier): number => {
+      let sum = 0
+      let n = 0
+      for (let seed = 0; seed < 120; seed++) {
+        const c = generateCourse({ difficulty: tier, seed })
+        for (const z of c.zones) {
+          if (z.kind !== 'ramp') continue
+          const ys = pointsInZone(c, z).map((p) => p.y)
+          sum += Math.max(...ys)
+          n++
+        }
+      }
+      return n === 0 ? 0 : sum / n
+    }
+    expect(avgRampPeak('expert')).toBeGreaterThan(avgRampPeak('easy'))
+  })
+})
+
+describe('generateCourse — Stage-3 feature structural invariants', () => {
+  it('ramps rise above base, never dip below it, and land back flat at base', () => {
+    const seed = firstSeedWith('expert', 'ramp')
+    const course = generateCourse({ difficulty: 'expert', seed })
+    for (const zone of course.zones.filter((z) => z.kind === 'ramp')) {
+      const pts = pointsInZone(course, zone)
+      const ys = pts.map((p) => p.y)
+      // Never a pit: the ramp is entirely at or above the baseline.
+      expect(Math.min(...ys)).toBeGreaterThanOrEqual(BASE_Y - 1e-9)
+      // It actually rises (there IS a jump to launch off).
+      expect(Math.max(...ys)).toBeGreaterThan(BASE_Y + 0.5)
+      // Starts and ends flat on the baseline (composes with neighbours; lands flat).
+      expect(pts[0].y).toBeCloseTo(BASE_Y, 6)
+      expect(pts[pts.length - 1].y).toBeCloseTo(BASE_Y, 6)
+    }
+  })
+
+  it('water and bridge are flat, solid ground at the baseline (never a pit)', () => {
+    for (const kind of ['water', 'bridge'] as const) {
+      const seed = firstSeedWith('hard', kind)
+      const course = generateCourse({ difficulty: 'hard', seed })
+      for (const zone of course.zones.filter((z) => z.kind === kind)) {
+        for (const p of pointsInZone(course, zone)) {
+          expect(p.y).toBeCloseTo(BASE_Y, 6)
+        }
+      }
+    }
+  })
+
+  it('water surface is slippery/slow; bridge and ramp keep base grip', () => {
+    const water = generateCourse({ difficulty: 'hard', seed: firstSeedWith('hard', 'water') })
+    const waterZone = water.zones.find((z) => z.kind === 'water')!
+    expect(water.surfaceFriction((waterZone.xStart + waterZone.xEnd) / 2)).toBe(0.3)
+
+    const bridge = generateCourse({ difficulty: 'hard', seed: firstSeedWith('hard', 'bridge') })
+    const bridgeZone = bridge.zones.find((z) => z.kind === 'bridge')!
+    expect(bridge.surfaceFriction((bridgeZone.xStart + bridgeZone.xEnd) / 2)).toBe(0.6)
+
+    const ramp = generateCourse({ difficulty: 'hard', seed: firstSeedWith('hard', 'ramp') })
+    const rampZone = ramp.zones.find((z) => z.kind === 'ramp')!
+    // Take-off face grip (near the start of the ramp) is grippy base, not the
+    // slippery uphill grip — so every shape can climb and launch off it.
+    expect(ramp.surfaceFriction(rampZone.xStart + 1)).toBe(0.6)
+  })
 })
 
 // ─── Extended-tier determinism (beginner / expert) ────────────────────────────

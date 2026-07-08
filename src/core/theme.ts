@@ -35,6 +35,13 @@ export interface TerrainColors {
   ice: number
   eggs: number
   runOut: number
+  // ── Stage-3 terrain-variety features ──
+  /** Jump-ramp take-off surface. */
+  ramp: number
+  /** Water crossing (ford) surface — blue/ice/lava-variant per theme. */
+  water: number
+  /** Wooden bridge deck. */
+  bridge: number
 }
 
 /**
@@ -130,6 +137,9 @@ const GRASSLAND: Theme = {
     ice: 0x87ceeb,
     eggs: 0xf39c12,
     runOut: 0x4caf50,
+    ramp: 0xc0632a, // warm launch-ramp clay
+    water: 0x3a8ec4, // river blue
+    bridge: 0x8a5a32, // wooden planks
   },
   hills: [0x7fb4d8, 0xa6cce0, 0xc4dcec],
   forest: [0x5c7d68, 0x4a6b58, 0x6f8f78, 0x7a9384],
@@ -164,6 +174,9 @@ const DESERT: Theme = {
     ice: 0xcfe0d0, // salt-flat pale — the "ice" zone reads as cracked salt here
     eggs: 0xe8a84a,
     runOut: 0xd8c48a,
+    ramp: 0xc98a4a, // packed-sand kicker
+    water: 0x4aa9c4, // desert oasis / waterhole
+    bridge: 0x9c6b3c, // sun-bleached timber
   },
   hills: [0xcaa46a, 0xdcbe8c, 0xecd6b0],
   forest: [0x9a8552, 0x87754a, 0xa89a66, 0xb0a074], // dry scrub / cacti-green tinge
@@ -198,6 +211,9 @@ const SNOW: Theme = {
     ice: 0xbfe4f2, // glacial blue
     eggs: 0xdbe7f0,
     runOut: 0xf4f9fc,
+    ramp: 0xdfeaf2, // packed-snow kicker
+    water: 0x6fb8d6, // meltwater / open water
+    bridge: 0x7a6047, // dark timber against the snow
   },
   hills: [0xb8cfe0, 0xcfe0ec, 0xe3eef6],
   forest: [0x5a6f72, 0x4c6062, 0x6d8083, 0x7c8d8f], // frosted evergreens
@@ -232,6 +248,9 @@ const NIGHT: Theme = {
     ice: 0x3a5a72, // moonlit ice
     eggs: 0x6a5630,
     runOut: 0x2b4636,
+    ramp: 0x4a3f30, // dim earthen kicker
+    water: 0x2a4a68, // moonlit water
+    bridge: 0x3a2e22, // dark timber
   },
   hills: [0x24304f, 0x2c3a5c, 0x36466c],
   forest: [0x1f3040, 0x1a2a38, 0x253848, 0x2c3e4e], // dark silhouetted tree line
@@ -266,6 +285,9 @@ const LAVA: Theme = {
     ice: 0xe0632a, // molten flow (no ice here — reads as lava channel)
     eggs: 0xd96a24,
     runOut: 0x3a2b26,
+    ramp: 0xb5461e, // glowing molten kicker
+    water: 0xe0632a, // molten lava channel (no water here — reads as lava)
+    bridge: 0x2e211c, // charred timber deck
   },
   hills: [0x3a221c, 0x4a2a20, 0x5a3226], // dark volcanic ridges
   forest: [0x2a1c18, 0x241714, 0x33201c, 0x3a2620], // charred tree line
