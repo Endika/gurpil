@@ -11,12 +11,18 @@
  *   both touch and mouse in one code path.
  * - Pure helper `strokeToShape` is extracted for unit-testability in node env.
  * - No Three.js / physics imports — only classifyStroke + shapes types + DOM.
+ * - Static visual styling (size, position, colors, safe-area insets) lives in
+ *   the `.draw-box` rule in src/ui/styles.css (Task 13); only the container's
+ *   class name is set here. Dynamic feedback (border flash color) stays
+ *   inline since it depends on the classified shape at runtime.
  */
 
 import { classifyStroke } from '../core/classifyStroke'
 import type { Point } from '../core/classifyStroke'
 import { SHAPES } from '../core/shapes'
 import type { ShapeId } from '../core/shapes'
+import { t } from './i18n'
+import type { MessageKey } from './i18n'
 
 // ─── Tunable constants ────────────────────────────────────────────────────────
 
@@ -32,14 +38,11 @@ const FEEDBACK_DURATION_MS = 600
 /** Recognized-shape label font size as a fraction of the canvas height. */
 const FEEDBACK_FONT_SIZE_RATIO = 0.22
 
-/** Default canvas size (square) expressed as a CSS value string. */
-const DEFAULT_SIZE_CSS = 'clamp(120px, 30vw, 220px)'
-
-/** Alpha of the background fill on the draw surface (0 = fully transparent). */
-const CANVAS_ALPHA = 0.18
-
 /** Stroke colour while drawing. */
 const LIVE_STROKE_COLOR = 'rgba(255,255,255,0.9)'
+
+/** Border color while idle (no feedback flash in progress) — matches styles.css. */
+const IDLE_BORDER_COLOR = 'rgba(255,255,255,0.4)'
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -55,34 +58,13 @@ export interface DrawBox {
  */
 export function createDrawBox(onShape: (id: ShapeId) => void): DrawBox {
   // ── Container ────────────────────────────────────────────────────────────────
+  // Sizing/position/colors come from the `.draw-box` rule in styles.css.
   const container = document.createElement('div')
   container.className = 'draw-box'
 
-  // Inline defaults so the component works without an external stylesheet.
-  Object.assign(container.style, {
-    width: DEFAULT_SIZE_CSS,
-    height: DEFAULT_SIZE_CSS,
-    position: 'fixed',
-    bottom: '1rem',
-    right: '1rem',
-    borderRadius: '12px',
-    border: '2px solid rgba(255,255,255,0.3)',
-    overflow: 'hidden',
-    touchAction: 'none', // prevent browser scroll hijack inside the box
-    cursor: 'crosshair',
-    background: `rgba(0,0,0,${CANVAS_ALPHA})`,
-    backdropFilter: 'blur(4px)',
-    zIndex: '100',
-    boxSizing: 'border-box',
-  } satisfies Partial<CSSStyleDeclaration>)
-
   // ── Canvas ───────────────────────────────────────────────────────────────────
+  // Sizing comes from the `.draw-box canvas` rule in styles.css.
   const canvas = document.createElement('canvas')
-  Object.assign(canvas.style, {
-    display: 'block',
-    width: '100%',
-    height: '100%',
-  } satisfies Partial<CSSStyleDeclaration>)
   container.appendChild(canvas)
 
   // ── Backing store sizing (DPR-aware) ─────────────────────────────────────────
@@ -164,7 +146,7 @@ export function createDrawBox(onShape: (id: ShapeId) => void): DrawBox {
     if (feedbackTimer !== null) {
       clearTimeout(feedbackTimer)
       feedbackTimer = null
-      container.style.borderColor = 'rgba(255,255,255,0.3)'
+      container.style.borderColor = IDLE_BORDER_COLOR
     }
 
     const colorHex = SHAPES[id].colorHex
@@ -175,8 +157,8 @@ export function createDrawBox(onShape: (id: ShapeId) => void): DrawBox {
 
     container.style.borderColor = cssColor
 
-    // Also draw the shape label briefly on the canvas.
-    const label = id.toUpperCase()
+    // Also draw the shape label briefly on the canvas (i18n — no hardcoded copy).
+    const label = t(SHAPES[id].labelKey as MessageKey).toUpperCase()
     ctx.save()
     ctx.font = `bold ${Math.round(canvas.height * FEEDBACK_FONT_SIZE_RATIO)}px sans-serif`
     ctx.fillStyle = cssColor
@@ -187,7 +169,7 @@ export function createDrawBox(onShape: (id: ShapeId) => void): DrawBox {
     ctx.restore()
 
     feedbackTimer = setTimeout(() => {
-      container.style.borderColor = 'rgba(255,255,255,0.3)'
+      container.style.borderColor = IDLE_BORDER_COLOR
       clearCanvas()
       feedbackTimer = null
     }, FEEDBACK_DURATION_MS)
@@ -200,7 +182,7 @@ export function createDrawBox(onShape: (id: ShapeId) => void): DrawBox {
     if (feedbackTimer !== null) {
       clearTimeout(feedbackTimer)
       feedbackTimer = null
-      container.style.borderColor = 'rgba(255,255,255,0.3)'
+      container.style.borderColor = IDLE_BORDER_COLOR
     }
 
     e.preventDefault()

@@ -12,9 +12,10 @@
  *   - Loop: rAF + fixed-step physics accumulator (via loop.ts).
  *            While racing: full auto-throttle forward (setThrottle(1) + applyDrive()).
  *            On finish: throttle cut to 0, timer frozen, restart prompt shown.
- *   - HUD: minimal timer + restart affordance. Task 13 will replace with full HUD;
- *          the elements added here are tagged with data-hud so Task 13 can clean
- *          them up cleanly.
+ *   - HUD: timer readout + start/finish overlays, built by `createHud`
+ *          (src/ui/hud.ts). Restart is wired inside the HUD (page reload).
+ *          All copy comes from i18n (src/ui/i18n.ts) — see also main.ts for
+ *          the styles.css import.
  *
  * Restart strategy: page reload (`location.reload()`). Simplest possible reset
  * — rebuilds the full Rapier world and Three.js scene from scratch. Avoids any
@@ -26,6 +27,7 @@ import { createWorld, PHYSICS_TIMESTEP } from '../physics/world'
 import { createVehicle } from '../physics/vehicle'
 import { createScene } from '../render/scene'
 import { createDrawBox } from '../ui/drawBox'
+import { createHud } from '../ui/hud'
 import { createRun, startRun, tickRun } from '../core/run'
 import { advanceAccumulator, MAX_STEPS_PER_FRAME } from './loop'
 import type { RunState } from '../core/run'
@@ -40,58 +42,6 @@ const STEP_MS = PHYSICS_TIMESTEP * 1000
  * on the terrain before the player can start the race.
  */
 const SETTLE_STEPS = 90
-
-// ─── HUD helpers ─────────────────────────────────────────────────────────────
-
-function createHud(root: HTMLElement): {
-  timer: HTMLElement
-  restart: HTMLElement
-} {
-  const shared: Partial<CSSStyleDeclaration> = {
-    position: 'fixed',
-    fontFamily: 'monospace',
-    fontSize: '1.1rem',
-    color: '#fff',
-    textShadow: '0 1px 4px rgba(0,0,0,0.7)',
-    zIndex: '200',
-    pointerEvents: 'none',
-  }
-
-  const timer = document.createElement('div')
-  Object.assign(timer.style, shared, {
-    top: '0.75rem',
-    left: '50%',
-    transform: 'translateX(-50%)',
-    background: 'rgba(0,0,0,0.35)',
-    padding: '0.25rem 0.75rem',
-    borderRadius: '8px',
-  } satisfies Partial<CSSStyleDeclaration>)
-  timer.dataset['hud'] = 'timer'
-  timer.textContent = '0.000 s'
-  root.appendChild(timer)
-
-  const restart = document.createElement('div')
-  Object.assign(restart.style, shared, {
-    bottom: '0.75rem',
-    left: '50%',
-    transform: 'translateX(-50%)',
-    background: 'rgba(0,0,0,0.55)',
-    padding: '0.35rem 1rem',
-    borderRadius: '8px',
-    display: 'none',
-    pointerEvents: 'auto',
-    cursor: 'pointer',
-  } satisfies Partial<CSSStyleDeclaration>)
-  restart.dataset['hud'] = 'restart'
-  restart.textContent = 'Draw a shape to start — tap here to restart'
-  root.appendChild(restart)
-
-  return { timer, restart }
-}
-
-function formatTime(ms: number): string {
-  return (ms / 1000).toFixed(3) + ' s'
-}
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -128,16 +78,9 @@ export async function startGame(root: HTMLElement): Promise<void> {
     // the first time. Subsequent draws only swap the shape.
     if (run.phase === 'idle') {
       run = startRun(run)
-      hud.restart.style.display = 'none'
     }
   })
   root.appendChild(drawBox.el)
-
-  // Show the restart affordance initially so the player knows to draw.
-  hud.restart.style.display = 'block'
-  hud.restart.addEventListener('click', () => {
-    location.reload()
-  })
 
   // ── Fixed-step accumulator state ──────────────────────────────────────────
   let accumMs = 0
@@ -178,17 +121,14 @@ export async function startGame(root: HTMLElement): Promise<void> {
     }
 
     // ── HUD update ───────────────────────────────────────────────────────
+    hud.setTime(run.elapsedMs)
     if (run.phase === 'idle') {
-      hud.timer.textContent = 'Draw a shape to start!'
-      hud.restart.style.display = 'block'
+      hud.showStart()
     } else if (run.phase === 'racing') {
-      hud.timer.textContent = formatTime(run.elapsedMs)
-      hud.restart.style.display = 'none'
+      hud.hide()
     } else {
       // finished
-      hud.timer.textContent = '✓ ' + formatTime(run.elapsedMs)
-      hud.restart.style.display = 'block'
-      hud.restart.textContent = 'Finished! Tap to restart'
+      hud.showFinish(run.elapsedMs)
     }
 
     // ── Render ───────────────────────────────────────────────────────────
