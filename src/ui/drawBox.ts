@@ -38,6 +38,9 @@ const FEEDBACK_DURATION_MS = 600
 /** Recognized-shape label font size as a fraction of the canvas height. */
 const FEEDBACK_FONT_SIZE_RATIO = 0.22
 
+/** Max label width as a fraction of the canvas width (long words shrink to fit). */
+const FEEDBACK_MAX_WIDTH_RATIO = 0.88
+
 /** Stroke colour while drawing. */
 const LIVE_STROKE_COLOR = 'rgba(255,255,255,0.9)'
 
@@ -160,12 +163,29 @@ export function createDrawBox(onShape: (id: ShapeId) => void): DrawBox {
     // Also draw the shape label briefly on the canvas (i18n — no hardcoded copy).
     const label = t(SHAPES[id].labelKey as MessageKey).toUpperCase()
     ctx.save()
-    ctx.font = `bold ${Math.round(canvas.height * FEEDBACK_FONT_SIZE_RATIO)}px sans-serif`
-    ctx.fillStyle = cssColor
-    ctx.globalAlpha = 0.9
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText(label, canvas.width / 2, canvas.height / 2)
+
+    // Shrink the font until the (possibly long) word fits the box width, so
+    // labels like "CUADRADO" / "TRIÁNGULO" don't overflow and become unreadable.
+    const maxWidth = canvas.width * FEEDBACK_MAX_WIDTH_RATIO
+    let fontPx = Math.round(canvas.height * FEEDBACK_FONT_SIZE_RATIO)
+    ctx.font = `bold ${fontPx}px sans-serif`
+    const measured = ctx.measureText(label).width
+    if (measured > maxWidth) {
+      fontPx = Math.floor((fontPx * maxWidth) / measured)
+      ctx.font = `bold ${fontPx}px sans-serif`
+    }
+
+    const cx = canvas.width / 2
+    const cy = canvas.height / 2
+    // Dark outline for contrast against any terrain/stroke color behind it.
+    ctx.lineWidth = Math.max(2, fontPx * 0.12)
+    ctx.strokeStyle = 'rgba(0,0,0,0.65)'
+    ctx.lineJoin = 'round'
+    ctx.strokeText(label, cx, cy, maxWidth)
+    ctx.fillStyle = cssColor
+    ctx.fillText(label, cx, cy, maxWidth)
     ctx.restore()
 
     feedbackTimer = setTimeout(() => {
