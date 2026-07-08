@@ -74,6 +74,22 @@
   display: none;
 }
 
+/*
+ * Start overlay must NOT block or hide the draw surface: the race begins by
+ * drawing a shape, so the overlay lets pointers pass through, stays visually
+ * transparent (the game + draw-box show through), and anchors its text to the
+ * top so it never overlaps the bottom-centered draw-box.
+ */
+.hud-overlay--start {
+  pointer-events: none;
+  background: transparent;
+  justify-content: flex-start;
+}
+
+.hud-overlay--start .hud-prompt {
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+}
+
 .hud-title {
   margin: 0;
   font-size: clamp(2rem, 10vw, 3.5rem);
@@ -134,7 +150,8 @@
 .draw-box {
   position: fixed;
   bottom: calc(1rem + var(--gurpil-safe-bottom));
-  right: calc(1rem + var(--gurpil-safe-right));
+  left: 50%;
+  transform: translateX(-50%);
   width: clamp(120px, 30vw, 220px);
   height: clamp(120px, 30vw, 220px);
   box-sizing: border-box;
