@@ -167,7 +167,11 @@ describe('circle drives off from a dead stop anywhere (anti-sleep)', () => {
   }, 30000)
 
   it('drives off from a dead stop settled on the uphill ramp and reaches the finish', async () => {
-    const { maxX } = await driveFromRest('circle', 70, 6)
+    // x=70 sits mid-way up the steepened ramp; y=14 spawns just above the ramp
+    // surface there (ramp y≈10 at x=70) so the car settles onto it. Even from a
+    // dead stop on the slope the low-grip circle is penalised (crawls) but is
+    // NEVER stuck — it still climbs out and reaches the finish.
+    const { maxX } = await driveFromRest('circle', 70, 14)
     expect(maxX).toBeGreaterThanOrEqual(X_FINISH)
   }, 30000)
 })

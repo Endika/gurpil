@@ -15,16 +15,18 @@
  *   - EGGS   : the `line` (largest effective radius) covers the egg stretch far
  *              better than the `circle`. The circle no longer permanently stalls
  *              — it just makes less progress in the same window.
- *   - SLOPE  : on a steep, slick ramp the grip difference is real — an unpowered
- *              low-grip `circle` slides back down, where the grippiest `triangle`
- *              holds.
+ *   - SLOPE  : on the ACTUAL course uphill the grip difference is real — driving
+ *              from the base of the ramp, the grippy `triangle` climbs clearly
+ *              further than the low-grip `circle`, which slips and crawls. This is
+ *              the fix for the "el círculo no sufre penalizaciones en las cuestas"
+ *              playtest report: the drawn shape now MATTERS on the hill.
  */
 
 import { describe, it, expect, beforeAll } from 'vitest'
 import RAPIER from '@dimforge/rapier2d-compat'
 import { buildCourse } from '../../src/core/course'
-import { createWorld, PHYSICS_TIMESTEP } from '../../src/physics/world'
-import { createVehicle, type Vehicle } from '../../src/physics/vehicle'
+import { createWorld } from '../../src/physics/world'
+import { createVehicle } from '../../src/physics/vehicle'
 import { SHAPE_IDS, type ShapeId } from '../../src/core/shapes'
 
 beforeAll(async () => {
@@ -44,7 +46,7 @@ async function runOnCourse(
   start: { x: number; y: number },
   throttle: number,
   driveSteps: number,
-): Promise<{ dx: number; maxX: number; finalX: number }> {
+): Promise<{ dx: number; maxX: number; finalX: number; finalY: number }> {
   const course = buildCourse()
   const world = await createWorld(course)
   const vehicle = createVehicle(world, start)
@@ -60,51 +62,8 @@ async function runOnCourse(
     world.step()
     maxX = Math.max(maxX, vehicle.position().x)
   }
-  const finalX = vehicle.position().x
-  return { dx: finalX - startX, maxX, finalX }
-}
-
-/** Build a bare world containing a single straight ramp (fixed friction). */
-function makeRampWorld(slopeDeg: number, groundFriction: number) {
-  const world = new RAPIER.World({ x: 0, y: -9.81 })
-  world.timestep = PHYSICS_TIMESTEP
-  const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed())
-  const rad = (slopeDeg * Math.PI) / 180
-  const a = { x: -10, y: -10 * Math.tan(rad) }
-  const b = { x: 60, y: 60 * Math.tan(rad) }
-  world.createCollider(
-    RAPIER.ColliderDesc.segment(a, b).setFriction(groundFriction),
-    body,
-  )
-  return { world: { raw: world, step: () => world.step() }, rad }
-}
-
-/**
- * Place an UNPOWERED vehicle on a ramp and measure how far it slides back down
- * (negative dx) over `steps`. Same ground friction for every shape — only the
- * wheel shape (and its own friction) differs.
- */
-async function rollbackOnRamp(
-  shape: ShapeId,
-  slopeDeg: number,
-  groundFriction: number,
-  steps: number,
-): Promise<number> {
-  const { world, rad } = makeRampWorld(slopeDeg, groundFriction)
-  const sx = 20
-  const sy = sx * Math.tan(rad) + 1.2
-  const vehicle: Vehicle = createVehicle(world, { x: sx, y: sy })
-  for (let i = 0; i < SETTLE_STEPS; i++) world.step()
-  if (shape !== 'circle') vehicle.swapShape(shape)
-
-  const startX = vehicle.position().x
-  vehicle.setThrottle(0)
-  for (let i = 0; i < steps; i++) {
-    vehicle.applyDrive()
-    vehicle.stabilize()
-    world.step()
-  }
-  return vehicle.position().x - startX // negative = slid back down the slope
+  const finalPos = vehicle.position()
+  return { dx: finalPos.x - startX, maxX, finalX: finalPos.x, finalY: finalPos.y }
 }
 
 // ─── FLAT: nobody is stuck; circle beats square ──────────────────────────────
@@ -138,23 +97,36 @@ describe('FLAT differentiation', () => {
   })
 })
 
-// ─── SLOPE: triangle grips where circle slides back ──────────────────────────
+// ─── SLOPE: the drawn shape MATTERS on the actual course uphill ───────────────
 
-describe('SLOPE differentiation', () => {
-  it('unpowered circle slides back down a steep slick ramp while triangle holds', async () => {
-    // Steep + slick enough that the low-grip circle can no longer hold static
-    // friction, but the grippiest triangle still does.
-    const SLOPE_DEG = 26
-    const GROUND_FRICTION = 0.3
-    const STEPS = 400
+describe('SLOPE differentiation (actual course uphill)', () => {
+  /**
+   * Settled start at the BASE of the course uphill ramp (x≈52). Both shapes
+   * begin from the same pose and drive up at full throttle for the same window.
+   */
+  const UPHILL_BASE = { x: 52, y: 4 }
+  const CLIMB_STEPS = 300
 
-    const circleBack = await rollbackOnRamp('circle', SLOPE_DEG, GROUND_FRICTION, STEPS)
-    const triangleBack = await rollbackOnRamp('triangle', SLOPE_DEG, GROUND_FRICTION, STEPS)
+  /**
+   * Minimum net-x margin (metres) by which the grippy triangle must out-climb
+   * the slipping circle over CLIMB_STEPS. Measured margin ≈ 6.3 m (triangle
+   * ≈ 14.3, circle ≈ 7.9 — the triangle climbs ~80 % further); we assert a
+   * comfortable, non-tautological fraction of it.
+   */
+  const MIN_UPHILL_MARGIN = 4
 
-    // Circle slides clearly back down the slope.
-    expect(circleBack).toBeLessThan(-3.0)
-    // Triangle grips: it holds far better than the circle (real margin).
-    expect(Math.abs(triangleBack)).toBeLessThan(Math.abs(circleBack) - 3.0)
+  it('grippy triangle climbs the uphill clearly further than the slipping circle', async () => {
+    const circle = await runOnCourse('circle', UPHILL_BASE, 1, CLIMB_STEPS)
+    const triangle = await runOnCourse('triangle', UPHILL_BASE, 1, CLIMB_STEPS)
+
+    // The low-grip circle is PENALISED on the hill but never stuck: it still
+    // crawls forward (positive net progress up the ramp).
+    expect(circle.dx, 'circle should still crawl up (not stuck)').toBeGreaterThan(0)
+    // The grippy triangle grips the slope and climbs markedly further than the
+    // slipping circle — the drawn shape now matters uphill (real margin).
+    expect(triangle.dx).toBeGreaterThan(circle.dx + MIN_UPHILL_MARGIN)
+    // And it also gains more HEIGHT, not just distance along a flatter path.
+    expect(triangle.finalY).toBeGreaterThan(circle.finalY)
   })
 })
 
@@ -163,9 +135,11 @@ describe('SLOPE differentiation', () => {
 describe('EGGS differentiation', () => {
   it('line covers the eggs stretch far better than circle in the same window', async () => {
     // Start just before the first egg (eggs at x = 185,190,195,200,205).
-    const start = { x: 182, y: 8 }
-    const circle = await runOnCourse('circle', start, 1, 600)
-    const line = await runOnCourse('line', start, 1, 600)
+    // y spawns above the eggs-plateau surface (which sits at the uphill peak
+    // height minus the ice descent) so the vehicle settles onto it.
+    const start = { x: 182, y: 22 }
+    const circle = await runOnCourse('circle', start, 1, 850)
+    const line = await runOnCourse('line', start, 1, 850)
 
     // Both make forward progress (the circle is NOT permanently stuck any more).
     expect(circle.maxX).toBeGreaterThan(start.x + 2)

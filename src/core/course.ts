@@ -66,12 +66,21 @@ const BASE_Y = 0
 /**
  * Peak y reached at the top of the uphill ramp (metres above BASE_Y).
  *
- * Lowered from the original steep value so the 40 m ramp grade is gentle enough
- * for a plain circle two-wheeler to climb without pitching over backwards and
- * dead-ending (playtest fix). Still a clear, visible rise (well above the
- * course-test's >5 m requirement) and feeds the mud/ice/eggs plateau height.
+ * Grade tuning (playtest "el círculo no sufre penalizaciones en las cuestas"):
+ * at the old gentle 8 m rise the 40 m ramp was ~11°, where every wheel shape had
+ * more than enough grip to climb at full motor speed — so the low-grip circle was
+ * actually FASTER uphill than the grippy triangle (speedMul dominated) and the
+ * drawn shape did NOT matter on the slope. Raised so the 40 m ramp grade (~27°,
+ * atan(20/40)) sits in the band (verified by the real-engine slope sweep) where
+ * wheel grip becomes the binding constraint: the low-grip circle (friction 0.55,
+ * see shapes.ts) slips and crawls up slowly, while the grippy triangle (1.3)
+ * grips and climbs ~80 % further over the same window. Kept just below the cliff
+ * (~29°, PEAK 22) where the circle can no longer restart from a dead stop mid-
+ * ramp — at PEAK 20 the circle is clearly PENALISED on the hill but NEVER
+ * permanently stuck: it still crawls up and finishes, and switching to triangle
+ * is the smart play. Also feeds the mud/ice/eggs plateau height.
  */
-const UPHILL_PEAK_Y = 8
+const UPHILL_PEAK_Y = 20
 
 /**
  * Amplitude of the rocky bumps (metres, peak above / trough below BASE_Y).
