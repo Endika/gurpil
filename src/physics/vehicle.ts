@@ -77,7 +77,7 @@ const WHEEL_OFFSET_Y = -(CHASSIS_HALF_H + WHEEL_RADIUS * MAX_RADIUS_MUL + WHEEL_
 /**
  * Motor target speed for full throttle at speedMul = 1 (rad/s).
  * The per-shape `speedMul` scales this, so circle (1.0) is fastest and the
- * grippy shapes (square 0.7, triangle 0.8, line 0.85) top out slower.
+ * grippy shapes (square 0.64, triangle 0.8, line 0.85) top out slower.
  */
 const MAX_MOTOR_SPEED = 22.0
 
