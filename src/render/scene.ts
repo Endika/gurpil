@@ -16,8 +16,11 @@
  *   rotation   → mesh.rotation.z (Rapier angle is CCW in 2D = Three.js CCW from +z)
  *
  * Terrain z layering (z=0 plane is the physics plane):
- *   terrain strip:            z = -0.5 (front face ≈ -0.45, behind the vehicle)
- *   chassis, wheels, monigote: z =  0.0 (one shared plane)
+ *   terrain strip (road):      z spans ≈ [-3.5, +0.5] (see TERRAIN_Z) —
+ *                              straddles the vehicle's plane, most of the
+ *                              depth trailing behind it, a small margin ahead
+ *   chassis, wheels, monigote,
+ *   egg obstacles:              z =  0.0 (one shared plane, inside the road span)
  * Chassis, wheels and monigote all sit on the SAME z-plane so the scooter and
  * its rider read as one coherent, attached 3D object rather than a stack of
  * flat layers pushed toward the camera at different depths (a leftover 2D-
@@ -32,7 +35,7 @@ import type { Course } from '../core/course'
 import type { Vehicle } from '../physics/vehicle'
 import { SHAPES } from '../core/shapes'
 import type { ShapeId } from '../core/shapes'
-import { buildTerrainMesh, buildObstacleMeshes } from './terrain'
+import { buildTerrainMesh, buildObstacleMeshes, TERRAIN_FRONT_Z } from './terrain'
 import { wheelGeometry, wheelGeometryBounds, WHEEL_VISUAL_RADIUS } from './wheelMesh'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -103,8 +106,12 @@ const CHASSIS_Z = 0
  * so the wheels read as attached under the deck instead of floating apart
  * from it. This used to be pushed to 0.4 ("in front of chassis") as a 2D-
  * layering trick to dodge terrain occlusion; that trick is no longer needed
- * because the terrain's front face sits at ≈ -0.45 (see TERRAIN_Z) — well
- * behind z=0 — so the wheels stay fully visible at the chassis plane.
+ * because the road's front (near) edge sits only ROAD_FRONT_MARGIN ahead of
+ * z=0 (see TERRAIN_Z) and the wall below that edge only extends DOWN from
+ * ground level — at this camera's fixed, near-side-on 3/4 angle a wall that
+ * close to the target grazes well above ground level at the wheel-contact
+ * sightline (comfortably clear of the wall's own extent), so the wheels stay
+ * fully visible at the chassis plane.
  */
 const WHEEL_Z = 0
 
@@ -116,17 +123,32 @@ const WHEEL_Z = 0
 const MONIGOTE_Z = 0
 
 /**
- * z offset applied to the whole terrain mesh so it sits BEHIND the entire
- * vehicle from the camera's view.
- *
- * The terrain strip is extruded away from the camera (front face at
- * TERRAIN_FRONT_Z ≈ +0.05 in terrain.ts) and then shifted back by this amount,
- * putting its frontmost face at ≈ -0.45 world-z — safely behind the chassis,
- * wheels and monigote, which all now share the z=0 plane (CHASSIS_Z, WHEEL_Z,
- * MONIGOTE_Z) so the vehicle stays fully visible and reads as one solid,
- * attached object.
+ * How far the road's near (front) edge sits ahead of the vehicle's shared
+ * z-plane (CHASSIS_Z/WHEEL_Z/MONIGOTE_Z = 0), in world z. A small positive
+ * margin so the vehicle (and the egg obstacles, also at z=0 — see EGG_Z in
+ * terrain.ts) clearly ride ON the road, comfortably behind its front edge —
+ * fixing the "floats in front of the track" bug (vehicle poking out past a
+ * front edge that used to sit entirely behind it) — while staying small
+ * enough that the wall below that edge doesn't reoccur as the EARLIER,
+ * already-fixed bug (a wall in front of the wheels occluding them): at this
+ * camera's fixed 3/4 angle (CAM_VIEW_DIR), a wall this close to the target
+ * only grazes ≈0.1 world-y above ground level at the wheel-contact sightline
+ * (comfortably clear, since the wall itself only extends DOWN from ground
+ * level and never up into the wheel/chassis/rider). Kept as a named constant
+ * so it's easy to nudge after a screenshot.
  */
-const TERRAIN_Z = -0.5
+const ROAD_FRONT_MARGIN = 0.5
+
+/**
+ * z offset applied to the whole terrain mesh so its top surface STRADDLES the
+ * vehicle's shared z=0 plane: world front edge = ROAD_FRONT_MARGIN, world
+ * back edge = ROAD_FRONT_MARGIN - TERRAIN_DEPTH (see terrain.ts for
+ * TERRAIN_FRONT_Z/TERRAIN_DEPTH). Most of the road's depth trails behind the
+ * vehicle, with just ROAD_FRONT_MARGIN still in front of it, so the vehicle
+ * reads as riding ON the road — not floating past its near edge, and not
+ * buried so deep in it that the front wall would occlude the wheels.
+ */
+const TERRAIN_Z = ROAD_FRONT_MARGIN - TERRAIN_FRONT_Z
 
 /** Chassis footprint half-extents in metres (matches physics: CHASSIS_HALF_W=1, CHASSIS_HALF_H=0.3). */
 const CHASSIS_HALF_W = 1.0

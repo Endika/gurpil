@@ -18,7 +18,7 @@ import type { Point } from '../core/classifyStroke'
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /** How far the terrain strip extends in the z direction (metres, visual depth). */
-const TERRAIN_DEPTH = 4
+export const TERRAIN_DEPTH = 4
 
 /** Y extent of the "wall" face below each surface point (metres, visual depth). */
 const TERRAIN_WALL_DEPTH = 8
@@ -36,25 +36,28 @@ const EGG_ROUGHNESS = 0.4
 const EGG_METALNESS = 0
 
 /**
- * z of the egg obstacle meshes. Placed on the physics plane (z=0), in front of
- * the terrain strip (whose front face is at TERRAIN_FRONT_Z after the mesh is
- * pushed back), so the eggs read as sitting on the track, not buried in it.
+ * z of the egg obstacle meshes — the SAME shared z-plane the vehicle rides on
+ * (CHASSIS_Z/WHEEL_Z/MONIGOTE_Z = 0 in scene.ts). The road (this strip's top
+ * surface) is positioned in scene.ts, via TERRAIN_Z/ROAD_FRONT_MARGIN, to
+ * straddle that same z=0 plane, so an egg sitting here reads as resting ON
+ * the road exactly like the vehicle does — not hanging out over its front
+ * edge (the earlier "floats/overhangs past the cliff" bug affected both).
  */
 const EGG_Z = 0
 
 /**
  * z of the terrain strip's FRONT face (the face nearest the camera), in the
- * mesh's local space.
+ * mesh's LOCAL space — i.e. before scene.ts applies `terrainMesh.position.z`
+ * (TERRAIN_Z) to place the strip in the world.
  *
- * Layering fix: the vehicle sits on the z=0 physics plane with its wheels at
- * WHEEL_Z=0.4 (see scene.ts). The terrain is extruded almost entirely AWAY from
- * the camera (into -z): its front face is kept just barely in front of the mesh
- * origin so the strip still reads as a solid 3D block, but the whole mesh is then
- * pushed behind the vehicle via `terrainMesh.position.z` in scene.ts. This keeps
- * the front WALL (which spans ground level, where the wheels are) from occluding
- * the wheels — the earlier bug was the wall's world-z landing in front of them.
+ * This local origin is arbitrary in isolation; what matters is the resulting
+ * WORLD-space front edge, which scene.ts pins to a small, named margin
+ * (ROAD_FRONT_MARGIN) just ahead of the vehicle/egg shared z=0 plane — see
+ * the TERRAIN_Z doc comment in scene.ts for the full placement rationale
+ * (straddling the road depth around the vehicle while keeping the front wall
+ * too close to the camera to occlude the wheels).
  */
-const TERRAIN_FRONT_Z = 0.05
+export const TERRAIN_FRONT_Z = 0.05
 
 /** z of the terrain strip's BACK face (extruded away from the camera). */
 const TERRAIN_BACK_Z = TERRAIN_FRONT_Z - TERRAIN_DEPTH
