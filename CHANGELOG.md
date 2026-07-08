@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/Endika/gurpil/compare/v0.6.1...v0.6.2) (2026-07-08)
+
+
+### Bug Fixes
+
+* **render:** zoom camera in further for a bigger on-screen vehicle ([b6fce13](https://github.com/Endika/gurpil/commit/b6fce1328f8c25d8cd284365393185860c723440))
+
 ## [0.6.1](https://github.com/Endika/gurpil/compare/v0.6.0...v0.6.1) (2026-07-08)
 
 
