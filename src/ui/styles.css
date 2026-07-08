@@ -83,7 +83,7 @@
 .hud-overlay--start {
   pointer-events: none;
   background: transparent;
-  justify-content: flex-start;
+  /* Vertically centered: clears the top timer and the bottom-centered draw-box. */
 }
 
 .hud-overlay--start .hud-prompt {
