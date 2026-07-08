@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.4.0](https://github.com/Endika/gurpil/compare/v0.3.0...v0.4.0) (2026-07-08)
+
+
+### Features
+
+* **render:** grounded backdrop, softer front edge and distant forest ([29d17ea](https://github.com/Endika/gurpil/commit/29d17eac4498584ac81c59c40016608d620be379))
+* **render:** landscape scenery — trees, bushes, clouds, grass ([05c61b1](https://github.com/Endika/gurpil/commit/05c61b1da8c30039884fc257917e883744c4aa98))
+* **render:** obstacles as logs and rocks ([6a1bdb7](https://github.com/Endika/gurpil/commit/6a1bdb7810a57edb716eec00627080c28761ea2c))
+
+
+### Bug Fixes
+
+* **render:** rounded solid line wheel ([8d5e8a0](https://github.com/Endika/gurpil/commit/8d5e8a00317bd7e880890c7603add0ddf2b1e000))
+* **render:** soften dirt/grass seam ([6753fd7](https://github.com/Endika/gurpil/commit/6753fd7d12659494e077fa14ecfb8bfc62610dc5))
+
 ## [0.3.0](https://github.com/Endika/gurpil/compare/v0.2.0...v0.3.0) (2026-07-08)
 
 
