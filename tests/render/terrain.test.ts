@@ -7,6 +7,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
+import * as THREE from 'three'
 import {
   terrainColorAt,
   buildTerrainStrip,
@@ -113,6 +114,55 @@ describe('buildTerrainStrip', () => {
     expect(positions[base + 2]).toBeCloseTo(TERRAIN_FRONT_Z + APRON_RUN) // toward camera
     // The apron never rises above the road surface (occlusion safety).
     expect(positions[base + 1]).toBeLessThan(3)
+  })
+
+  it('back-edge color blends toward the green ground backdrop; front-edge stays the true zone color', () => {
+    // Mud zone (x=110): a dark brown, distinctly non-green — the exact case
+    // the dirt/grass seam fix targets (see BACK_EDGE_BACKDROP_BLEND doc
+    // comment in terrain.ts).
+    const pts = [
+      { x: 110, y: 0 },
+      { x: 111, y: 0 },
+    ]
+    const { colors } = buildTerrainStrip(pts)
+    const zoneColor = new THREE.Color(terrainColorAt(110))
+
+    // vIdx 5*0+0 = top-front, vIdx 5*0+1 = top-back (see the vertex layout
+    // comment above buildTerrainStrip).
+    const [frontR, frontG, frontB] = [colors[0], colors[1], colors[2]]
+    const [backR, backG, backB] = [colors[3], colors[4], colors[5]]
+
+    // Front edge keeps the exact, true zone color.
+    expect(frontR).toBeCloseTo(zoneColor.r, 5)
+    expect(frontG).toBeCloseTo(zoneColor.g, 5)
+    expect(frontB).toBeCloseTo(zoneColor.b, 5)
+
+    // Back edge — where the strip meets the green backdrop — shifts toward
+    // green relative to the front, instead of repeating the same flat brown
+    // right up to the seam.
+    expect(backG).toBeGreaterThan(frontG)
+    expect(backR).not.toBeCloseTo(frontR, 3)
+    expect(backB).not.toBeCloseTo(frontB, 3)
+
+    // The bottom edge (wall) mirrors the same front/back split.
+    const [botFrontR] = [colors[2 * 3]]
+    const [botBackR] = [colors[3 * 3]]
+    expect(botFrontR).toBeCloseTo(frontR, 5)
+    expect(botBackR).toBeCloseTo(backR, 5)
+  })
+
+  it('apron-near color darkens off the FRONT zone color, unaffected by the back-edge blend', () => {
+    const pts = [
+      { x: 110, y: 0 },
+      { x: 111, y: 0 },
+    ]
+    const { colors } = buildTerrainStrip(pts)
+    const zoneColor = new THREE.Color(terrainColorAt(110))
+    const apronR = colors[4 * 3]
+    // Darkened but proportional to the true front zone color, not the
+    // backdrop-blended back-edge color.
+    expect(apronR).toBeLessThan(zoneColor.r)
+    expect(apronR).toBeGreaterThan(0)
   })
 
   it('all index values are within vertex range', () => {

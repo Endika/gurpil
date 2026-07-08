@@ -143,6 +143,21 @@ const GROUND_BACKDROP_X_MARGIN = 260
 const GROUND_BACKDROP_COLOR = 0x6ba368
 const GROUND_BACKDROP_ROUGHNESS = 1
 
+/**
+ * How far the terrain strip's BACK-edge vertex colors (top-back / bot-back,
+ * at TERRAIN_BACK_Z) shift toward GROUND_BACKDROP_COLOR, vs. the strip's
+ * FRONT edge which stays the true zone color (see terrainColorAt). Under the
+ * 3/4 camera the strip's top face is the only thing separating the terrain
+ * zone color (e.g. rocky/mud brown) from the green ground backdrop it butts
+ * up against at the back edge — with both edges the same flat zone color that
+ * boundary read as an abrupt cut. Blending the back edge toward the backdrop
+ * color turns the top face into a gradient across its own depth, so the zone
+ * color has already faded most of the way to the backdrop's green by the time
+ * it reaches that seam. Pure vertex-color change: no new geometry, no effect
+ * on collision/camera/gameplay.
+ */
+const BACK_EDGE_BACKDROP_BLEND = 0.65
+
 // ─── Terrain color zones ──────────────────────────────────────────────────────
 
 /**
@@ -190,6 +205,8 @@ export function buildTerrainStrip(ground: Point[]): {
   const zBack = TERRAIN_BACK_Z
   const wallBottom = -TERRAIN_WALL_DEPTH
   const zApron = zFront + APRON_RUN
+  // Built once (not per-point) — see BACK_EDGE_BACKDROP_BLEND doc comment.
+  const backdropColor = new THREE.Color(GROUND_BACKDROP_COLOR)
 
   // Per point i we emit 5 vertices:
   //   - top edge:  front (zFront) + back (zBack), at y = ground y
@@ -238,13 +255,26 @@ export function buildTerrainStrip(ground: Point[]): {
     positions[pi + 14] = zApron
 
     const col = new THREE.Color(terrainColorAt(x))
-    // Top + wall verts (0..3) take the zone color; the apron-near vert (4) is
-    // darkened so the bank shades into depth rather than reading as a flat card.
-    for (let k = 0; k < 4; k++) {
+    // Back-edge verts (top-back, bot-back) blend toward the ground backdrop's
+    // color so the top face fades into it across the strip's depth instead of
+    // meeting it in a hard, single-color line at TERRAIN_BACK_Z (see
+    // BACK_EDGE_BACKDROP_BLEND doc comment above).
+    const backEdgeCol = col.clone().lerp(backdropColor, BACK_EDGE_BACKDROP_BLEND)
+
+    // Front-edge verts (0: top-front, 2: bot-front) keep the true zone color.
+    for (const k of [0, 2]) {
       colors[(vi + k) * 3 + 0] = col.r
       colors[(vi + k) * 3 + 1] = col.g
       colors[(vi + k) * 3 + 2] = col.b
     }
+    // Back-edge verts (1: top-back, 3: bot-back) use the backdrop-blended color.
+    for (const k of [1, 3]) {
+      colors[(vi + k) * 3 + 0] = backEdgeCol.r
+      colors[(vi + k) * 3 + 1] = backEdgeCol.g
+      colors[(vi + k) * 3 + 2] = backEdgeCol.b
+    }
+    // Apron-near vert (4) is darkened off the true (front) zone color so the
+    // bank shades into depth rather than reading as a flat card.
     colors[(vi + 4) * 3 + 0] = col.r * APRON_DARKEN
     colors[(vi + 4) * 3 + 1] = col.g * APRON_DARKEN
     colors[(vi + 4) * 3 + 2] = col.b * APRON_DARKEN
