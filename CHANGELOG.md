@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0](https://github.com/Endika/gurpil/compare/v0.7.0...v0.8.0) (2026-07-08)
+
+
+### Features
+
+* **render:** geometry for water, bridges and ramps ([dd3e041](https://github.com/Endika/gurpil/commit/dd3e04169fec617a458262c1959aea9ef6bbce8e))
+* **render:** landing dust, water splash, checkpoint & medal juice ([fa4538c](https://github.com/Endika/gurpil/commit/fa4538c44d160204b3b0db61d357cbbdd9a70ce5))
+
 ## [0.7.0](https://github.com/Endika/gurpil/compare/v0.6.2...v0.7.0) (2026-07-08)
 
 
