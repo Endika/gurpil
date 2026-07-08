@@ -469,10 +469,12 @@ const SKY_GRADIENT_HEIGHT = 256
 // Linear fog tinted to the sky's horizon so distance fades seamlessly into the
 // sky. FOG_NEAR is set beyond the largest camera-to-vehicle distance (portrait
 // pushes the camera to ≈87 units back) so the car and nearby track are NEVER
-// fogged; only the far parallax hills fade. The fog COLOR is themed (theme.fog).
+// fogged; only the far parallax hills fade. Kept a single global constant
+// (not themed) because it's a camera-safety distance, not a mood knob. The fog
+// COLOR and FAR distance (density/haziness) are themed (theme.fog / theme.fogFar)
+// so e.g. lava/desert read hazier and snow reads clearer.
 
 const FOG_NEAR = 105
-const FOG_FAR = 320
 
 /** Convert a hex color number (0xRRGGBB) to a `#rrggbb` CSS string for the 2D
  *  canvas gradient. */
@@ -494,9 +496,14 @@ const SHADOW_MAP_SIZE = 1024
 const SHADOW_CAM_HALF = 18
 const SHADOW_NEAR = 1
 const SHADOW_FAR = 90
-/** Depth/normal bias to suppress shadow acne on the near-flat terrain top. */
-const SHADOW_BIAS = -0.0004
-const SHADOW_NORMAL_BIAS = 0.02
+/**
+ * Depth/normal bias to suppress shadow acne on the near-flat terrain top. A
+ * slightly higher normal bias than the depth-only minimum softens the shadow
+ * edge into a gentler contact shadow (less of a hard, precisely-traced
+ * silhouette) without introducing peter-panning at this shadow-camera scale.
+ */
+const SHADOW_BIAS = -0.0003
+const SHADOW_NORMAL_BIAS = 0.035
 
 // ─── Vehicle material finish ────────────────────────────────────────────────────
 
@@ -618,7 +625,7 @@ export function createScene(course: Course, theme: Theme): Scene3D {
   // Vertical gradient sky (deep blue → pale horizon) instead of a flat color,
   // plus horizon-tinted fog so distance reads with depth.
   scene.background = buildSkyGradientTexture(theme)
-  scene.fog = new THREE.Fog(theme.fog, FOG_NEAR, FOG_FAR)
+  scene.fog = new THREE.Fog(theme.fog, FOG_NEAR, theme.fogFar)
 
   // Hemisphere light (sky from above, ground bounce from below)
   const hemi = new THREE.HemisphereLight(theme.hemiSky, theme.hemiGround, theme.hemiIntensity)
@@ -1103,9 +1110,11 @@ interface HillLayer {
 }
 
 /**
- * Build the vertical gradient sky as a 1×N canvas texture (deep blue up top
- * fading to a pale horizon band), painted onto scene.background. Cheap: one
- * small texture, generated once.
+ * Build the vertical gradient sky as a 1×N canvas texture — a THREE-stop
+ * gradient (top / mid / horizon) painted onto scene.background. The extra mid
+ * stop (theme.skyMid) gives each biome's sky a richer, less flat-feeling
+ * blend than a plain two-color wash, for the cost of one more gradient stop
+ * on the same cheap, generate-once texture.
  */
 function buildSkyGradientTexture(theme: Theme): THREE.CanvasTexture {
   const canvas = document.createElement('canvas')
@@ -1114,6 +1123,7 @@ function buildSkyGradientTexture(theme: Theme): THREE.CanvasTexture {
   const ctx = canvas.getContext('2d')!
   const grad = ctx.createLinearGradient(0, 0, 0, SKY_GRADIENT_HEIGHT)
   grad.addColorStop(0, hexToCss(theme.skyTop))
+  grad.addColorStop(0.55, hexToCss(theme.skyMid))
   grad.addColorStop(1, hexToCss(theme.skyHorizon))
   ctx.fillStyle = grad
   ctx.fillRect(0, 0, 1, SKY_GRADIENT_HEIGHT)

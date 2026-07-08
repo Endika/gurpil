@@ -13,14 +13,17 @@ import { THEMES, THEME_IDS, pickTheme, type Theme, type ThemeId } from '../../sr
 const SCALAR_COLOR_FIELDS: (keyof Theme)[] = [
   'clearColor',
   'skyTop',
+  'skyMid',
   'skyHorizon',
   'fog',
+  'fogFar',
   'sunColor',
   'sunIntensity',
   'hemiSky',
   'hemiGround',
   'hemiIntensity',
   'groundBackdrop',
+  'terrainRoughness',
   'trunk',
   'grass',
   'logBark',
@@ -90,6 +93,18 @@ describe('THEMES completeness', () => {
       it('uses positive light intensities', () => {
         expect(theme.sunIntensity).toBeGreaterThan(0)
         expect(theme.hemiIntensity).toBeGreaterThan(0)
+      })
+
+      it('uses a valid (0..1) PBR roughness for the terrain', () => {
+        expect(theme.terrainRoughness).toBeGreaterThanOrEqual(0)
+        expect(theme.terrainRoughness).toBeLessThanOrEqual(1)
+      })
+
+      it('uses a positive, sane fog-far distance beyond the global fog-near', () => {
+        // FOG_NEAR (scene.ts) is 105 — every theme's fog must fully resolve
+        // (fogFar) well beyond that so the near track is never fogged and the
+        // far parallax hills still get a chance to fade in before it.
+        expect(theme.fogFar).toBeGreaterThan(105)
       })
     })
   }

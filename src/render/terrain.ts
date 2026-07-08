@@ -34,10 +34,12 @@ const TERRAIN_WALL_DEPTH = 8
 const EGG_VISUAL_RADIUS = 0.6
 
 /**
- * Physically-based material tuning. Terrain is rough (matte ground); obstacles
- * are a touch glossier so they catch the sun. metalness stays 0 (non-metallic).
+ * Physically-based material tuning. Terrain roughness now comes from the
+ * active theme (theme.terrainRoughness — see core/theme.ts) so each biome's
+ * ground catches light differently instead of sharing one flat matte finish;
+ * metalness stays a constant 0 across every biome (ground is never metallic).
+ * Obstacles are a touch glossier than the ground so they catch the sun.
  */
-const TERRAIN_ROUGHNESS = 0.9
 const TERRAIN_METALNESS = 0
 
 // ─── Obstacle variant geometry/material tuning ────────────────────────────────
@@ -137,7 +139,9 @@ const GROUND_BACKDROP_BACK_Z = -170
  *  frustum's width at the far ground depth for any aspect, so the course
  *  start/finish never reveal a bare edge. */
 const GROUND_BACKDROP_X_MARGIN = 260
-const GROUND_BACKDROP_ROUGHNESS = 1
+/** Just shy of fully matte so the huge backdrop plane still picks up a faint
+ *  sheen from the sun instead of reading as a flat, unlit-looking card. */
+const GROUND_BACKDROP_ROUGHNESS = 0.95
 
 /**
  * How far the terrain strip's BACK-edge vertex colors (top-back / bot-back,
@@ -603,7 +607,9 @@ function buildBridgeFeature(zone: Zone, ground: Point[], theme: Theme): THREE.Gr
 const RAMP_LIP_WIDTH_X = 0.6
 const RAMP_LIP_HEIGHT = 0.18
 const RAMP_LIP_Y_OFFSET = RAMP_LIP_HEIGHT / 2
-const RAMP_LIP_ROUGHNESS = 0.6
+/** Slightly less glossy than a plain plastic-toy accent — still catches a
+ *  highlight, without a hard specular hotspot. */
+const RAMP_LIP_ROUGHNESS = 0.7
 
 const RAMP_STRUT_THICKNESS = 0.25
 /** Struts sit slightly BELOW the ramp's own up-face line so they read as a
@@ -709,11 +715,13 @@ function buildLogMesh(theme: Theme): THREE.Mesh {
     color: theme.logBark,
     roughness: LOG_ROUGHNESS,
     metalness: LOG_METALNESS,
+    flatShading: true,
   })
   const endCapMat = new THREE.MeshStandardMaterial({
     color: theme.logEndCap,
     roughness: LOG_ROUGHNESS,
     metalness: LOG_METALNESS,
+    flatShading: true,
   })
   // CylinderGeometry emits 3 groups: [0] side, [1] top cap, [2] bottom cap.
   return new THREE.Mesh(geo, [barkMat, endCapMat, endCapMat])
@@ -769,13 +777,17 @@ export function buildTerrainMesh(course: Course, theme: Theme): THREE.Mesh {
   geo.computeVertexNormals()
 
   // Standard (PBR) material keeps the per-zone vertex colors but adds relief:
-  // roughness-driven shading so hills and walls catch the sun and cast/receive
-  // soft shadows for a genuinely 3D read.
+  // roughness-driven shading (per-biome, theme.terrainRoughness) so hills and
+  // walls catch the sun and cast/receive soft shadows for a genuinely 3D read.
+  // flatShading reads each segment's top/wall/apron quad as its own facet —
+  // on this sparse, low-poly strip that gives real faceted depth instead of a
+  // single smooth (and flatter-looking) surface, at no extra geometry cost.
   const mat = new THREE.MeshStandardMaterial({
     vertexColors: true,
     side: THREE.DoubleSide,
-    roughness: TERRAIN_ROUGHNESS,
+    roughness: theme.terrainRoughness,
     metalness: TERRAIN_METALNESS,
+    flatShading: true,
   })
 
   const mesh = new THREE.Mesh(geo, mat)

@@ -65,12 +65,24 @@ export interface Theme {
   clearColor: number
   /** Vertical gradient sky: color at the top of the dome. */
   skyTop: number
+  /** Vertical gradient sky: middle band — a third gradient stop so the sky
+   *  reads with more depth than a flat two-color blend (still one cheap
+   *  canvas texture, no extra draw calls). */
+  skyMid: number
   /** Vertical gradient sky: color at the horizon band. */
   skyHorizon: number
 
   // ── Atmosphere ─────────────────────────────────────────────────────────────
   /** Linear fog tint (usually matches skyHorizon so distance fades into sky). */
   fog: number
+  /**
+   * Linear fog's far distance (metres) — how quickly distant scenery fully
+   * fades out. Lower = denser/hazier (lava/desert haze); higher = clearer air
+   * (snow). The near distance stays a single global constant in scene.ts
+   * (tied to the camera's max follow distance, not biome mood) so no theme
+   * can accidentally fog the track itself.
+   */
+  fogFar: number
 
   // ── Lighting ───────────────────────────────────────────────────────────────
   /** Directional "sun"/"moon" light tint. */
@@ -89,6 +101,13 @@ export interface Theme {
   groundBackdrop: number
   /** Per-zone terrain surface colors. */
   terrain: TerrainColors
+  /**
+   * Terrain strip + decorative-feature surface roughness (0..1, PBR). Varies
+   * per biome so ground catches light differently — smoother/cooler snow,
+   * sandy-matte desert, glow-dulled cooled lava rock — instead of every
+   * biome sharing one flat matte finish.
+   */
+  terrainRoughness: number
 
   // ── Parallax background hills (near → far, 3 layers) ───────────────────────
   hills: readonly [number, number, number]
@@ -128,14 +147,17 @@ const GRASSLAND: Theme = {
   id: 'grassland',
   clearColor: 0x87ceeb,
   skyTop: 0x5ba8e6,
+  skyMid: 0x8cc7ec,
   skyHorizon: 0xd6ecf7,
   fog: 0xd6ecf7,
+  fogFar: 320, // fresh, clear air
   sunColor: 0xfff7e0,
   sunIntensity: 1.3,
   hemiSky: 0x87cefa,
   hemiGround: 0x8b6914,
   hemiIntensity: 0.85,
   groundBackdrop: 0x6ba368,
+  terrainRoughness: 0.82,
   terrain: {
     flat: 0x5cb85c,
     rocky: 0x8b7355,
@@ -168,14 +190,17 @@ const DESERT: Theme = {
   id: 'desert',
   clearColor: 0xf4d9a6,
   skyTop: 0xe9b96e,
+  skyMid: 0xf3cf93,
   skyHorizon: 0xfbe8c4,
-  fog: 0xfbe8c4,
+  fog: 0xf5dcae, // slightly warmer/denser than the pale sky horizon — reads as heat haze
+  fogFar: 260, // haze pulls the horizon in
   sunColor: 0xfff0cf,
   sunIntensity: 1.45,
   hemiSky: 0xf6d9a0,
   hemiGround: 0xb07a3a,
   hemiIntensity: 0.9,
   groundBackdrop: 0xd9b676,
+  terrainRoughness: 0.95, // dry, matte sand — no sheen
   terrain: {
     flat: 0xe0c084,
     rocky: 0xb8905a,
@@ -208,14 +233,17 @@ const SNOW: Theme = {
   id: 'snow',
   clearColor: 0xdcecf5,
   skyTop: 0x9cc2de,
+  skyMid: 0xc3ddec,
   skyHorizon: 0xeaf4fb,
   fog: 0xeaf4fb,
+  fogFar: 340, // crisp, bright, clear cold air
   sunColor: 0xeaf2ff,
-  sunIntensity: 1.15,
+  sunIntensity: 1.2,
   hemiSky: 0xcfe3f2,
   hemiGround: 0x8fa3b3,
   hemiIntensity: 0.95,
   groundBackdrop: 0xdfeaf2,
+  terrainRoughness: 0.68, // snow catches a soft sheen without reading as wet plastic
   terrain: {
     flat: 0xf2f7fb, // fresh snow
     rocky: 0xb9c3cc, // exposed cold rock
@@ -248,14 +276,17 @@ const NIGHT: Theme = {
   id: 'night',
   clearColor: 0x10162e,
   skyTop: 0x0a0f24,
+  skyMid: 0x161c3c, // deep indigo band gives the night sky a gradient instead of a flat wash
   skyHorizon: 0x24304f,
   fog: 0x1a2340,
+  fogFar: 240, // murk swallows distance sooner — moodier without ever fogging the near track
   sunColor: 0xbcd0ff, // cool moonlight
   sunIntensity: 0.7,
-  hemiSky: 0x2a3a63,
+  hemiSky: 0x2e3a6e, // slightly richer moonlit-blue sky bounce
   hemiGround: 0x14182c,
-  hemiIntensity: 0.55,
+  hemiIntensity: 0.5, // dimmer ambient fill — deeper shadows read as genuinely night
   groundBackdrop: 0x1f2a44,
+  terrainRoughness: 0.88, // matte — no glare stealing the moonlit mood
   terrain: {
     flat: 0x2e4a3a, // moonlit grass
     rocky: 0x3c3a44,
@@ -288,14 +319,17 @@ const LAVA: Theme = {
   id: 'lava',
   clearColor: 0x2a1414,
   skyTop: 0x1c1012,
+  skyMid: 0x3a1a16, // ember-red band between the smoky top and the glowing horizon
   skyHorizon: 0x5a2a1e, // smoky, ember-lit haze
   fog: 0x4a241c,
+  fogFar: 200, // thick smoke/ash — the hazy, low-visibility signature of this biome
   sunColor: 0xffb066, // hot orange glow
   sunIntensity: 1.25,
   hemiSky: 0x6a2e1e,
   hemiGround: 0x2a1410,
-  hemiIntensity: 0.7,
+  hemiIntensity: 0.75, // warmer ambient bounce off the glowing ground
   groundBackdrop: 0x33221e,
+  terrainRoughness: 0.8, // cooled matte rock, but not chalky
   terrain: {
     flat: 0x3a2b26, // cooled dark rock
     rocky: 0x2b201d,
