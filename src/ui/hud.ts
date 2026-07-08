@@ -1,19 +1,25 @@
 /**
  * HUD — timer readout + start/finish overlays.
  *
- * A self-contained DOM component: no game/physics knowledge. The game loop
- * drives it via `setTime` (every frame) and `showStart` / `showFinish` /
- * `hide` on phase transitions (idle / racing / finished — see core/run.ts).
+ * A self-contained DOM component: no physics knowledge (it does know the
+ * `Medal` / best-`Record` domain types from src/core so it can render them).
+ * The game loop drives it via `setTime` (every frame) and `showStart` /
+ * `showFinish` / `hide` on phase transitions (idle / racing / finished — see
+ * core/run.ts), plus `setTarget` once at boot with the course's par time.
  *
- * Restart is wired here (full page reload — see game.ts header for the
- * rationale) so the loop only needs to react to phase, not plumb a callback.
+ * "Play again" / "Change difficulty" on the finish overlay are wired to the
+ * `HudCallbacks` passed to `createHud` — game.ts decides what each does (see
+ * src/game/pendingRace.ts for why that's a page reload under the hood).
  *
  * All user-facing text comes from `t()` (src/ui/i18n.ts) — no hardcoded copy.
  * Visual styling lives in `src/ui/styles.css` (class names below), imported
  * once from main.ts.
  */
 
+import type { Medal } from '../core/medal'
+import type { Record as BestRecord } from '../core/records'
 import { t } from './i18n'
+import { medalColorVar, medalMessageKey } from './medalDisplay'
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -38,6 +44,22 @@ export function speedFraction(speedMps: number): number {
   return f
 }
 
+/** The earned result of a finished run, plus the (possibly just-improved)
+ *  best record for its difficulty — everything the finish overlay shows. */
+export interface FinishResult {
+  elapsedMs: number
+  medal: Medal
+  best: BestRecord
+}
+
+/** Callbacks for the finish overlay's two actions. */
+export interface HudCallbacks {
+  /** Start a brand-new race at the SAME difficulty (fresh random seed). */
+  onPlayAgain(): void
+  /** Return to the difficulty select screen. */
+  onChangeDifficulty(): void
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 export interface Hud {
@@ -45,10 +67,12 @@ export interface Hud {
   setTime(ms: number): void
   /** Update the speed gauge from the car's forward speed (m/s). */
   setSpeed(speedMps: number): void
+  /** Set the subtle "target" (par time) readout shown next to the timer. */
+  setTarget(ms: number): void
   /** Show the idle "draw to start" overlay (hides the finish overlay). */
   showStart(): void
-  /** Show the finish overlay with the final elapsed time + restart button. */
-  showFinish(ms: number): void
+  /** Show the finish overlay with the run's result + best record. */
+  showFinish(result: FinishResult): void
   /** Hide both overlays (used while racing). */
   hide(): void
 }
@@ -64,13 +88,20 @@ export function formatTime(ms: number): string {
 /**
  * Build the HUD DOM and attach it to `root`.
  */
-export function createHud(root: HTMLElement): Hud {
+export function createHud(root: HTMLElement, callbacks: HudCallbacks): Hud {
   // ── Timer (always visible) ────────────────────────────────────────────────
   const timer = document.createElement('div')
   timer.className = 'hud-timer'
   timer.dataset['hud'] = 'timer'
   timer.textContent = formatTime(0)
   root.appendChild(timer)
+
+  // ── Target / par-time readout (subtle, always visible once set) ──────────
+  const target = document.createElement('div')
+  target.className = 'hud-target'
+  target.dataset['hud'] = 'target'
+  target.hidden = true
+  root.appendChild(target)
 
   // ── Speed gauge (vertical thermometer) ────────────────────────────────────
   // Always visible; fill height + color track the car's forward speed, so a
@@ -115,15 +146,38 @@ export function createHud(root: HTMLElement): Hud {
   finishTime.className = 'hud-finish-time'
   finishOverlay.appendChild(finishTime)
 
-  const restartBtn = document.createElement('button')
-  restartBtn.type = 'button'
-  restartBtn.className = 'hud-restart-btn'
-  restartBtn.dataset['hud'] = 'restart'
-  restartBtn.textContent = t('hud.restart')
-  restartBtn.addEventListener('click', () => {
-    location.reload()
+  const finishMedal = document.createElement('p')
+  finishMedal.className = 'hud-finish-medal'
+  finishOverlay.appendChild(finishMedal)
+
+  const finishBest = document.createElement('p')
+  finishBest.className = 'hud-finish-best'
+  finishOverlay.appendChild(finishBest)
+
+  const buttonRow = document.createElement('div')
+  buttonRow.className = 'hud-btn-row'
+
+  const playAgainBtn = document.createElement('button')
+  playAgainBtn.type = 'button'
+  playAgainBtn.className = 'hud-btn hud-btn--primary'
+  playAgainBtn.dataset['hud'] = 'play-again'
+  playAgainBtn.textContent = t('hud.playAgain')
+  playAgainBtn.addEventListener('click', () => {
+    callbacks.onPlayAgain()
   })
-  finishOverlay.appendChild(restartBtn)
+  buttonRow.appendChild(playAgainBtn)
+
+  const changeDifficultyBtn = document.createElement('button')
+  changeDifficultyBtn.type = 'button'
+  changeDifficultyBtn.className = 'hud-btn hud-btn--secondary'
+  changeDifficultyBtn.dataset['hud'] = 'change-difficulty'
+  changeDifficultyBtn.textContent = t('hud.changeDifficulty')
+  changeDifficultyBtn.addEventListener('click', () => {
+    callbacks.onChangeDifficulty()
+  })
+  buttonRow.appendChild(changeDifficultyBtn)
+
+  finishOverlay.appendChild(buttonRow)
 
   root.appendChild(finishOverlay)
 
@@ -137,14 +191,28 @@ export function createHud(root: HTMLElement): Hud {
       // Red (slow) → green (fast): hue 0..120.
       gaugeFill.style.background = `hsl(${(f * 120).toFixed(0)}, 85%, 50%)`
     },
+    setTarget(ms: number): void {
+      target.hidden = false
+      target.textContent = `${t('hud.target')}: ${formatTime(ms)}`
+    },
     showStart(): void {
       startOverlay.hidden = false
       finishOverlay.hidden = true
     },
-    showFinish(ms: number): void {
+    showFinish(result: FinishResult): void {
       startOverlay.hidden = true
       finishOverlay.hidden = false
-      finishTime.textContent = `${t('hud.time')}: ${formatTime(ms)}`
+      finishTime.textContent = `${t('hud.time')}: ${formatTime(result.elapsedMs)}`
+
+      finishMedal.textContent = `${t('hud.medal')}: ${t(medalMessageKey(result.medal))}`
+      finishMedal.style.color = medalColorVar(result.medal)
+
+      const bestMs = result.best.bestMs
+      finishBest.textContent =
+        bestMs === null
+          ? t('select.noBest')
+          : `${t('label.best')}: ${formatTime(bestMs)} — ${t(medalMessageKey(result.best.bestMedal))}`
+      finishBest.style.color = medalColorVar(result.best.bestMedal)
     },
     hide(): void {
       startOverlay.hidden = true

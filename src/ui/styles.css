@@ -17,6 +17,11 @@
   --gurpil-mint: #95e1d3;
   --gurpil-overlay-bg: rgba(15, 15, 30, 0.86);
 
+  --gurpil-medal-gold: #ffd54a;
+  --gurpil-medal-silver: #cbd5e1;
+  --gurpil-medal-bronze: #d98a4f;
+  --gurpil-medal-none: #8a8fa3;
+
   --gurpil-safe-top: env(safe-area-inset-top, 0px);
   --gurpil-safe-right: env(safe-area-inset-right, 0px);
   --gurpil-safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -46,6 +51,28 @@
   border-radius: 999px;
   background: linear-gradient(135deg, var(--gurpil-coral), var(--gurpil-teal));
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+/* ─── Target / par-time readout (subtle, under the timer) ───────────────── */
+
+.hud-target {
+  position: fixed;
+  top: calc(3.1rem + var(--gurpil-safe-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  pointer-events: none;
+
+  font-family: var(--gurpil-font);
+  font-weight: 600;
+  font-size: clamp(0.75rem, 2.6vw, 0.95rem);
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.75);
+  letter-spacing: 0.02em;
+}
+
+.hud-target[hidden] {
+  display: none;
 }
 
 /* ─── Overlays (start / finish) ─────────────────────────────────────────── */
@@ -148,21 +175,41 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ─── Restart button (large mobile tap target) ──────────────────────────── */
+.hud-finish-medal {
+  margin: 0;
+  font-size: clamp(1.3rem, 6vw, 2rem);
+  font-weight: 800;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
 
-.hud-restart-btn {
-  min-width: 12rem;
+.hud-finish-best {
+  margin: 0;
+  font-size: clamp(0.95rem, 4vw, 1.2rem);
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+/* ─── Action buttons (large mobile tap targets) ─────────────────────────── */
+
+.hud-btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.hud-btn {
+  min-width: 10rem;
   min-height: 3.25rem;
-  padding: 0.85rem 2rem;
+  padding: 0.85rem 1.75rem;
 
   font-family: var(--gurpil-font);
-  font-size: clamp(1rem, 4.5vw, 1.25rem);
+  font-size: clamp(0.95rem, 4.2vw, 1.15rem);
   font-weight: 700;
-  color: var(--gurpil-bg);
 
   border: none;
   border-radius: 999px;
-  background: linear-gradient(135deg, var(--gurpil-yellow), var(--gurpil-coral));
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
 
   cursor: pointer;
@@ -170,8 +217,113 @@
   transition: transform 0.1s ease;
 }
 
-.hud-restart-btn:active {
+.hud-btn:active {
   transform: scale(0.96);
+}
+
+.hud-btn--primary {
+  color: var(--gurpil-bg);
+  background: linear-gradient(135deg, var(--gurpil-yellow), var(--gurpil-coral));
+}
+
+.hud-btn--secondary {
+  color: var(--gurpil-ink);
+  background: rgba(255, 255, 255, 0.12);
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  box-shadow: none;
+}
+
+/* ─── Difficulty select screen ───────────────────────────────────────────── */
+
+.select-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+
+  padding: calc(1.5rem + var(--gurpil-safe-top)) calc(1.5rem + var(--gurpil-safe-right))
+    calc(1.5rem + var(--gurpil-safe-bottom)) calc(1.5rem + var(--gurpil-safe-left));
+
+  background: var(--gurpil-bg);
+  color: var(--gurpil-ink);
+  font-family: var(--gurpil-font);
+  text-align: center;
+}
+
+.select-title {
+  margin: 0;
+  font-size: clamp(1.6rem, 7vw, 2.5rem);
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--gurpil-coral), var(--gurpil-yellow), var(--gurpil-mint));
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.select-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: min(90vw, 22rem);
+}
+
+.select-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+
+  min-height: 4.5rem;
+  padding: 1rem 1.5rem;
+
+  font-family: var(--gurpil-font);
+  color: var(--gurpil-ink);
+
+  border: none;
+  border-radius: 18px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 0.1s ease;
+}
+
+.select-card:active {
+  transform: scale(0.97);
+}
+
+.select-card--easy {
+  background: linear-gradient(135deg, var(--gurpil-mint), var(--gurpil-teal));
+}
+
+.select-card--medium {
+  background: linear-gradient(135deg, var(--gurpil-yellow), var(--gurpil-mint));
+}
+
+.select-card--hard {
+  background: linear-gradient(135deg, var(--gurpil-coral), var(--gurpil-yellow));
+}
+
+.select-card-name {
+  font-size: clamp(1.2rem, 5.5vw, 1.5rem);
+  font-weight: 800;
+  color: var(--gurpil-bg);
+}
+
+.select-card-best {
+  font-size: clamp(0.85rem, 3.6vw, 1rem);
+  font-variant-numeric: tabular-nums;
+  color: rgba(15, 15, 30, 0.75);
+}
+
+.select-card-medal {
+  font-size: clamp(0.8rem, 3.4vw, 0.95rem);
+  font-weight: 700;
 }
 
 /* ─── Draw-box (component created in src/ui/drawBox.ts) ─────────────────── */
