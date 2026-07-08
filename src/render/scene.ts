@@ -37,6 +37,7 @@ import { SHAPES } from '../core/shapes'
 import type { ShapeId } from '../core/shapes'
 import { buildTerrainMesh, buildObstacleMeshes, TERRAIN_FRONT_Z } from './terrain'
 import { wheelGeometry, wheelGeometryBounds, WHEEL_VISUAL_RADIUS } from './wheelMesh'
+import { buildScenery } from './scenery'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -630,6 +631,13 @@ export function createScene(course: Course): Scene3D {
   const hills = buildHillLayers()
   for (const hill of hills) scene.add(hill.mesh)
 
+  // ── Landscape scenery (trees, bushes, distant forest, clouds, grass) ────────────
+  // Pure decoration — no physics/collision, never occludes the road/vehicle
+  // (see scenery.ts header for the z-depth safety argument). Only its
+  // distant forest band needs a per-frame parallax update (see sync below).
+  const scenery = buildScenery(course)
+  scene.add(scenery.group)
+
   // ── Camera ──────────────────────────────────────────────────────────────────
   const aspect = window.innerWidth / window.innerHeight
   let camDist = requiredCameraDistance(aspect)
@@ -833,6 +841,9 @@ export function createScene(course: Course): Scene3D {
         hill.mesh.position.x = camX * hill.parallax
         hill.mesh.position.y = camY * hill.parallax + hill.baseY
       }
+
+      // ── Distant forest band parallax ───────────────────────────────────────
+      scenery.update(camX, camY)
     },
 
     render(): void {
