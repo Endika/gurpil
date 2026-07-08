@@ -122,6 +122,7 @@ export async function startGame(root: HTMLElement): Promise<void> {
 
     // ── HUD update ───────────────────────────────────────────────────────
     hud.setTime(run.elapsedMs)
+    hud.setSpeed(vehicle.chassis.linvel().x)
     if (run.phase === 'idle') {
       hud.showStart()
     } else if (run.phase === 'racing') {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatTime } from '../../src/ui/hud'
+import { formatTime, speedFraction } from '../../src/ui/hud'
 
 describe('formatTime', () => {
   it('formats zero milliseconds', () => {
@@ -21,5 +21,25 @@ describe('formatTime', () => {
 
   it('never returns a negative-looking string for 0', () => {
     expect(formatTime(0)).not.toContain('-')
+  })
+})
+
+describe('speedFraction', () => {
+  it('is 0 at a standstill', () => {
+    expect(speedFraction(0)).toBe(0)
+  })
+
+  it('clamps negative (sliding backwards) speed to 0', () => {
+    expect(speedFraction(-5)).toBe(0)
+  })
+
+  it('saturates at 1 for speeds at or above the display max', () => {
+    expect(speedFraction(8)).toBe(1)
+    expect(speedFraction(20)).toBe(1)
+  })
+
+  it('scales linearly in between', () => {
+    expect(speedFraction(4)).toBeCloseTo(0.5, 5)
+    expect(speedFraction(2)).toBeCloseTo(0.25, 5)
   })
 })

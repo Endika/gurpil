@@ -20,11 +20,31 @@ import { t } from './i18n'
 /** Number of decimal digits shown in the elapsed-time readout. */
 const TIME_DECIMALS = 3
 
+/**
+ * Forward speed (m/s) mapped to a full speed gauge. Roughly the circle's top
+ * speed on flat ground (MAX_MOTOR_SPEED × wheel radius); the gauge saturates
+ * there so a struggling wheel (e.g. circle slipping uphill) reads visibly low.
+ */
+const MAX_DISPLAY_SPEED = 8
+
+/**
+ * Gauge fill fraction (0..1) for a forward speed in m/s. Pure — exported for
+ * unit tests. Negative speed (sliding backwards) clamps to 0.
+ */
+export function speedFraction(speedMps: number): number {
+  const f = speedMps / MAX_DISPLAY_SPEED
+  if (f < 0) return 0
+  if (f > 1) return 1
+  return f
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 export interface Hud {
   /** Update the always-visible top timer readout. */
   setTime(ms: number): void
+  /** Update the speed gauge from the car's forward speed (m/s). */
+  setSpeed(speedMps: number): void
   /** Show the idle "draw to start" overlay (hides the finish overlay). */
   showStart(): void
   /** Show the finish overlay with the final elapsed time + restart button. */
@@ -51,6 +71,17 @@ export function createHud(root: HTMLElement): Hud {
   timer.dataset['hud'] = 'timer'
   timer.textContent = formatTime(0)
   root.appendChild(timer)
+
+  // ── Speed gauge (vertical thermometer) ────────────────────────────────────
+  // Always visible; fill height + color track the car's forward speed, so a
+  // wheel that's the wrong shape for the terrain (slipping, slow) reads low.
+  const gauge = document.createElement('div')
+  gauge.className = 'hud-gauge'
+  gauge.dataset['hud'] = 'gauge'
+  const gaugeFill = document.createElement('div')
+  gaugeFill.className = 'hud-gauge-fill'
+  gauge.appendChild(gaugeFill)
+  root.appendChild(gauge)
 
   // ── Start overlay ─────────────────────────────────────────────────────────
   const startOverlay = document.createElement('div')
@@ -99,6 +130,12 @@ export function createHud(root: HTMLElement): Hud {
   return {
     setTime(ms: number): void {
       timer.textContent = formatTime(ms)
+    },
+    setSpeed(speedMps: number): void {
+      const f = speedFraction(speedMps)
+      gaugeFill.style.height = `${(f * 100).toFixed(1)}%`
+      // Red (slow) → green (fast): hue 0..120.
+      gaugeFill.style.background = `hsl(${(f * 120).toFixed(0)}, 85%, 50%)`
     },
     showStart(): void {
       startOverlay.hidden = false
