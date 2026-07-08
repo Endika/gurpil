@@ -231,6 +231,69 @@ const FOOT_Z_OFFSET = BLOB_BODY_RADIUS * 0.55
 /** Pixel ratio cap to limit GPU load on high-DPI mobile. */
 const MAX_PIXEL_RATIO = 2
 
+// ─── Max-speed sparks ───────────────────────────────────────────────────────────
+// A subtle particle effect that kicks in only near top speed, to signal
+// "you're going as fast as this shape allows" without shouting about it.
+// Sparks are emitted from the REAR wheel's ground contact and live in WORLD
+// space (direct children of `scene`, not of the tilting `body` sub-group) so
+// they trail behind the wheel instead of rotating with the chassis.
+
+/**
+ * Forward speed (m/s, chassis.linvel().x) above which sparks start flying.
+ * The HUD's speed gauge treats MAX_DISPLAY_SPEED=8 as "full"; this is set a
+ * bit below the fastest shape's actual top speed so sparks read as a
+ * near/at-max-speed cue rather than firing at everyday speeds.
+ */
+const SPARK_SPEED_THRESHOLD = 6.5
+
+/** Size of the reusable spark pool. Small on purpose — a sparkle, not a fire. */
+const SPARK_POOL_SIZE = 12
+
+/** Max sparks (re)spawned in a single frame while at speed — keeps it sparse. */
+const SPARK_SPAWN_PER_FRAME = 1
+
+/** Spark lifetime range (seconds). */
+const SPARK_LIFETIME_MIN = 0.15
+const SPARK_LIFETIME_MAX = 0.35
+
+/** Spark size range (metres, tetrahedron "radius"). */
+const SPARK_SIZE_MIN = 0.03
+const SPARK_SIZE_MAX = 0.07
+
+/** Spark ejection velocity: mostly backward (-x, trailing the rear wheel) and
+ *  slightly upward, with some random spread. */
+const SPARK_VEL_X_MIN = -3.5
+const SPARK_VEL_X_MAX = -1.0
+const SPARK_VEL_Y_MIN = 0.2
+const SPARK_VEL_Y_MAX = 1.6
+
+/** Slight downward gravity applied to sparks each frame (m/s^2), lighter than
+ *  real gravity so they arc gently rather than dropping like a physics object. */
+const SPARK_GRAVITY = -4
+
+/** Offset from the rear wheel's centre to its ground-contact point (metres). */
+const SPARK_EMIT_OFFSET_X = -0.15
+const SPARK_EMIT_OFFSET_Y = -WHEEL_VISUAL_RADIUS * 0.9
+
+/** z of the spark sprites — same neighbourhood as the wheels so they read as
+ *  coming off the ground contact, without z-fighting the disc. */
+const SPARK_Z = 0.45
+
+/** Bright warm spark colors — sparks pick one of these at spawn for variety. */
+const SPARK_COLORS = [0xfff3b0, 0xffd23f, 0xff9f1c]
+
+interface Spark {
+  mesh: THREE.Mesh
+  velocity: THREE.Vector3
+  /** Seconds remaining before this spark expires and can be respawned. Zero
+   *  (or less) means the spark is dead and available for respawn. */
+  life: number
+  /** Total lifetime this spark was spawned with, for fade/shrink easing. */
+  maxLife: number
+  /** Size (scale) this spark was spawned with, for the shrink-over-life ease. */
+  baseSize: number
+}
+
 // ─── Wheel spin marker (spoke) ─────────────────────────────────────────────────
 
 /**
@@ -375,6 +438,13 @@ export function createScene(course: Course): Scene3D {
   const vehicleMeshes = buildVehicleMeshes()
   scene.add(vehicleMeshes.group)
 
+  // ── Max-speed sparks ─────────────────────────────────────────────────────────
+  // World-space pool: added directly to `scene` (not to vehicleMeshes.group/body)
+  // so sparks stay put in the world and trail behind the rear wheel instead of
+  // moving/tilting with the chassis.
+  const sparks = buildSparkPool()
+  for (const spark of sparks) scene.add(spark.mesh)
+
   // ── Resize handler ───────────────────────────────────────────────────────────
   window.addEventListener('resize', () => {
     const w = window.innerWidth
@@ -418,6 +488,8 @@ export function createScene(course: Course): Scene3D {
       vehicleMeshes.body.rotation.z = cr
 
       // ── Wheels ────────────────────────────────────────────────────────────
+      let rearWheelX = 0
+      let rearWheelY = 0
       for (let i = 0; i < 2; i++) {
         const wt = vehicle.wheels[i].translation()
         const wr = vehicle.wheels[i].rotation()
@@ -425,7 +497,16 @@ export function createScene(course: Course): Scene3D {
         // Wheels are world-positioned: subtract group (chassis) position
         wm.position.set(wt.x - ct.x, wt.y - ct.y, WHEEL_Z)
         wm.rotation.z = wr
+        if (i === 0) {
+          // wheels[0] is the rear wheel — remember its world position for sparks.
+          rearWheelX = wt.x
+          rearWheelY = wt.y
+        }
       }
+
+      // ── Max-speed sparks ────────────────────────────────────────────────────
+      const forwardSpeed = vehicle.chassis.linvel().x
+      updateSparks(sparks, forwardSpeed, rearWheelX, rearWheelY, dtSec)
 
       // ── Shape morph detection ──────────────────────────────────────────────
       const shape = vehicle.currentShape()
@@ -709,4 +790,80 @@ function buildVehicleMeshes(): VehicleMeshes {
   }
 
   return { group, body, chassis, wheels, spokes, monigoteBody, monigoteHead }
+}
+
+/**
+ * Build the reusable spark pool: small tetrahedra, all dead (invisible) at
+ * start. All sparks share one geometry; each gets its own material instance
+ * (created once, here) since opacity/fade differs per spark over its life.
+ */
+function buildSparkPool(): Spark[] {
+  const geometry = new THREE.TetrahedronGeometry(1)
+  const sparks: Spark[] = []
+  for (let i = 0; i < SPARK_POOL_SIZE; i++) {
+    const material = new THREE.MeshBasicMaterial({
+      color: SPARK_COLORS[i % SPARK_COLORS.length],
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+    const mesh = new THREE.Mesh(geometry, material)
+    mesh.visible = false
+    sparks.push({ mesh, velocity: new THREE.Vector3(), life: 0, maxLife: 1, baseSize: SPARK_SIZE_MIN })
+  }
+  return sparks
+}
+
+/**
+ * Advance the spark pool by one frame: integrate every live spark (move,
+ * gravity, fade + shrink over its remaining life, hide once expired), and —
+ * only while at/near max speed — respawn a few expired sparks at the rear
+ * wheel's ground contact with a small random backward+upward kick.
+ *
+ * Sparks live in world space, so `rearWheelX`/`rearWheelY` must already be
+ * world coordinates (not group-local).
+ */
+function updateSparks(sparks: Spark[], forwardSpeed: number, rearWheelX: number, rearWheelY: number, dtSec: number): void {
+  const atMaxSpeed = Math.abs(forwardSpeed) >= SPARK_SPEED_THRESHOLD
+  let spawnedThisFrame = 0
+
+  for (const spark of sparks) {
+    if (spark.life > 0) {
+      // ── Integrate a live spark ──────────────────────────────────────────
+      spark.life -= dtSec
+      spark.velocity.y += SPARK_GRAVITY * dtSec
+      spark.mesh.position.x += spark.velocity.x * dtSec
+      spark.mesh.position.y += spark.velocity.y * dtSec
+
+      if (spark.life <= 0) {
+        spark.mesh.visible = false
+      } else {
+        // Ease out over the remaining life: shrink and fade toward 0.
+        const lifeFrac = spark.life / spark.maxLife
+        spark.mesh.scale.setScalar(spark.baseSize * lifeFrac)
+        ;(spark.mesh.material as THREE.MeshBasicMaterial).opacity = lifeFrac
+      }
+      continue
+    }
+
+    // ── Respawn an expired spark, only while genuinely at max speed ────────
+    if (atMaxSpeed && spawnedThisFrame < SPARK_SPAWN_PER_FRAME) {
+      spawnedThisFrame++
+
+      spark.maxLife = THREE.MathUtils.randFloat(SPARK_LIFETIME_MIN, SPARK_LIFETIME_MAX)
+      spark.life = spark.maxLife
+      spark.baseSize = THREE.MathUtils.randFloat(SPARK_SIZE_MIN, SPARK_SIZE_MAX)
+
+      spark.velocity.set(
+        THREE.MathUtils.randFloat(SPARK_VEL_X_MIN, SPARK_VEL_X_MAX),
+        THREE.MathUtils.randFloat(SPARK_VEL_Y_MIN, SPARK_VEL_Y_MAX),
+        0,
+      )
+      spark.mesh.position.set(rearWheelX + SPARK_EMIT_OFFSET_X, rearWheelY + SPARK_EMIT_OFFSET_Y, SPARK_Z)
+      spark.mesh.scale.setScalar(spark.baseSize)
+      ;(spark.mesh.material as THREE.MeshBasicMaterial).opacity = 1
+      spark.mesh.visible = true
+    }
+  }
 }
