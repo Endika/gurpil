@@ -6,7 +6,8 @@
  * ground points becomes a quad (two triangles) forming a wall face, plus a top
  * quad for the surface. Color varies per terrain zone for visual clarity.
  *
- * Obstacle eggs are simple sphere meshes placed at the obstacle positions.
+ * Obstacles render as log trunks or rock boulders (per-obstacle `variant`),
+ * placed at the obstacle positions.
  *
  * Pure geometry builder: no DOM, no Rapier, no physics state.
  */
@@ -23,17 +24,43 @@ export const TERRAIN_DEPTH = 4
 /** Y extent of the "wall" face below each surface point (metres, visual depth). */
 const TERRAIN_WALL_DEPTH = 8
 
-/** Radius of egg obstacle spheres (visual, slightly larger than physics). */
+/**
+ * Visual footprint radius shared by both obstacle variants — kept close to the
+ * physics ball's EGG_RADIUS (0.5, see `physics/world.ts`) so the collider reads
+ * as fair: what you see is roughly what you hit. Purely visual; the collider
+ * itself never changes.
+ */
 const EGG_VISUAL_RADIUS = 0.6
 
 /**
- * Physically-based material tuning. Terrain is rough (matte ground); eggs are
- * a touch glossier so they catch the sun. metalness stays 0 (non-metallic).
+ * Physically-based material tuning. Terrain is rough (matte ground); obstacles
+ * are a touch glossier so they catch the sun. metalness stays 0 (non-metallic).
  */
 const TERRAIN_ROUGHNESS = 0.9
 const TERRAIN_METALNESS = 0
-const EGG_ROUGHNESS = 0.4
-const EGG_METALNESS = 0
+
+// ─── Obstacle variant geometry/material tuning ────────────────────────────────
+
+/** Log (fallen tree trunk) cylinder: radius matches EGG_VISUAL_RADIUS, length
+ *  spans across the track depth (TERRAIN_DEPTH) so it reads as a trunk lying
+ *  across the road rather than a barrel standing on it. */
+const LOG_RADIUS = EGG_VISUAL_RADIUS
+const LOG_LENGTH = TERRAIN_DEPTH
+const LOG_RADIAL_SEGMENTS = 10
+const LOG_BARK_COLOR = 0x6b4226
+const LOG_END_CAP_COLOR = 0x4a2e1a
+const LOG_ROUGHNESS = 0.95
+const LOG_METALNESS = 0
+
+/** Rock (boulder): an irregular icosahedron, jittered per-vertex so it doesn't
+ *  read as a perfect gem — jitter is derived from each vertex's own position
+ *  (deterministic, no Math.random) so the mesh never flickers on rebuild. */
+const ROCK_RADIUS = EGG_VISUAL_RADIUS
+const ROCK_DETAIL = 1
+const ROCK_JITTER_AMOUNT = 0.12
+const ROCK_COLOR = 0x8d8d8d
+const ROCK_ROUGHNESS = 1
+const ROCK_METALNESS = 0
 
 /**
  * z of the egg obstacle meshes — the SAME shared z-plane the vehicle rides on
@@ -197,6 +224,69 @@ export function buildTerrainStrip(ground: Point[]): {
   return { positions, colors, indices }
 }
 
+// ─── Obstacle variant mesh builders ────────────────────────────────────────────
+
+/**
+ * Deterministic pseudo-random float in [0, 1) from an arbitrary seed number.
+ * Classic sine-hash: NOT a statistically strong RNG, but fine for cosmetic
+ * per-vertex jitter — same input always yields the same output (no flicker on
+ * rebuild), and no Math.random/Date is involved.
+ */
+function hash01(n: number): number {
+  const s = Math.sin(n) * 43758.5453
+  return s - Math.floor(s)
+}
+
+/** Build a fallen-log mesh: a cylinder lying across the track (axis along z),
+ *  with a darker end-cap so the cut faces read distinct from the bark. */
+function buildLogMesh(): THREE.Mesh {
+  const geo = new THREE.CylinderGeometry(LOG_RADIUS, LOG_RADIUS, LOG_LENGTH, LOG_RADIAL_SEGMENTS)
+  // CylinderGeometry's local axis is Y; rotate 90° about X so the axis runs
+  // along Z (across the track depth) once placed in the scene.
+  geo.rotateX(Math.PI / 2)
+
+  const barkMat = new THREE.MeshStandardMaterial({
+    color: LOG_BARK_COLOR,
+    roughness: LOG_ROUGHNESS,
+    metalness: LOG_METALNESS,
+  })
+  const endCapMat = new THREE.MeshStandardMaterial({
+    color: LOG_END_CAP_COLOR,
+    roughness: LOG_ROUGHNESS,
+    metalness: LOG_METALNESS,
+  })
+  // CylinderGeometry emits 3 groups: [0] side, [1] top cap, [2] bottom cap.
+  return new THREE.Mesh(geo, [barkMat, endCapMat, endCapMat])
+}
+
+/**
+ * Build a boulder mesh: a low-poly icosahedron with deterministic per-vertex
+ * jitter (derived from `seedX`, e.g. the obstacle's x) so each rock reads as a
+ * distinct, irregular stone rather than a perfect geometric solid — while
+ * staying stable across rebuilds (no Math.random).
+ */
+function buildRockMesh(seedX: number): THREE.Mesh {
+  const geo = new THREE.IcosahedronGeometry(ROCK_RADIUS, ROCK_DETAIL)
+  const pos = geo.getAttribute('position')
+  const v = new THREE.Vector3()
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i)
+    const jitter = 1 + (hash01(seedX * 12.9898 + i * 78.233) - 0.5) * ROCK_JITTER_AMOUNT
+    v.multiplyScalar(jitter)
+    pos.setXYZ(i, v.x, v.y, v.z)
+  }
+  pos.needsUpdate = true
+  geo.computeVertexNormals()
+
+  const mat = new THREE.MeshStandardMaterial({
+    color: ROCK_COLOR,
+    roughness: ROCK_ROUGHNESS,
+    metalness: ROCK_METALNESS,
+    flatShading: true,
+  })
+  return new THREE.Mesh(geo, mat)
+}
+
 // ─── Public builders ──────────────────────────────────────────────────────────
 
 /**
@@ -226,22 +316,22 @@ export function buildTerrainMesh(course: Course): THREE.Mesh {
 }
 
 /**
- * Build obstacle meshes (egg/sphere) from course.obstacles.
+ * Build obstacle meshes (log trunks / rock boulders) from course.obstacles.
+ *
+ * Purely a visual reskin: which mesh is built is driven by `obs.variant`
+ * (assigned deterministically by the seeded course generator), never by
+ * `Math.random`. The collider obstacles jam remains an invisible ball of
+ * EGG_RADIUS (see `physics/world.ts`) regardless of variant — gameplay is
+ * unchanged, only the mesh sitting on top of it differs.
+ *
  * Returns one Group containing all obstacle meshes.
  */
 export function buildObstacleMeshes(obstacles: Obstacle[]): THREE.Group {
   const group = new THREE.Group()
 
-  const eggGeo = new THREE.SphereGeometry(EGG_VISUAL_RADIUS, 10, 8)
-  const eggMat = new THREE.MeshStandardMaterial({
-    color: 0xff6b6b,
-    roughness: EGG_ROUGHNESS,
-    metalness: EGG_METALNESS,
-  })
-
   for (const obs of obstacles) {
     if (obs.kind !== 'egg') continue
-    const mesh = new THREE.Mesh(eggGeo, eggMat)
+    const mesh = obs.variant === 'log' ? buildLogMesh() : buildRockMesh(obs.x)
     mesh.position.set(obs.x, obs.y + EGG_VISUAL_RADIUS, EGG_Z)
     mesh.castShadow = true
     mesh.receiveShadow = true

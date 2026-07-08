@@ -89,6 +89,12 @@ describe('generateCourse — structural invariants', () => {
           expect(zoneAt(course, obs.x)?.kind).toBe('eggs')
         }
       })
+
+      it('every obstacle has a log or rock visual variant', () => {
+        for (const obs of course.obstacles) {
+          expect(['log', 'rock']).toContain(obs.variant)
+        }
+      })
     })
   }
 })
@@ -130,6 +136,40 @@ describe('generateCourse — determinism', () => {
     const easy = generateCourse({ difficulty: 'easy', seed: 42 })
     const hard = generateCourse({ difficulty: 'hard', seed: 42 })
     expect(easy.finishX).not.toBe(hard.finishX)
+  })
+})
+
+// ─── Obstacle visual variant (log / rock) ─────────────────────────────────────
+
+describe('generateCourse — obstacle variant', () => {
+  it('same {difficulty, seed} → identical variants (deterministic)', () => {
+    for (const difficulty of DIFFICULTIES) {
+      const a = generateCourse({ difficulty, seed: 55 })
+      const b = generateCourse({ difficulty, seed: 55 })
+      expect(a.obstacles.map((o) => o.variant)).toEqual(b.obstacles.map((o) => o.variant))
+    }
+  })
+
+  it('both log and rock variants occur across many seeds (real mix, not all-one)', () => {
+    const seen = new Set<string>()
+    for (let seed = 0; seed < 30; seed++) {
+      const course = generateCourse({ difficulty: 'hard', seed })
+      for (const obs of course.obstacles) seen.add(obs.variant)
+    }
+    expect(seen.has('log')).toBe(true)
+    expect(seen.has('rock')).toBe(true)
+  })
+})
+
+describe('buildCanonicalCourse — obstacle variant', () => {
+  it('is deterministic across calls', () => {
+    const a = buildCanonicalCourse()
+    const b = buildCanonicalCourse()
+    expect(a.obstacles.map((o) => o.variant)).toEqual(b.obstacles.map((o) => o.variant))
+  })
+
+  it('has at least one obstacle', () => {
+    expect(buildCanonicalCourse().obstacles.length).toBeGreaterThan(0)
   })
 })
 

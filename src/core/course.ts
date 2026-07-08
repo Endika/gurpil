@@ -24,10 +24,17 @@ import type { Point } from './classifyStroke'
 
 export type TerrainKind = 'flat' | 'rocky' | 'uphill' | 'mud' | 'ice' | 'eggs'
 
+/** Visual style of an obstacle. Purely cosmetic — the collider (a fixed-radius
+ *  ball, see `physics/world.ts`) and gameplay are IDENTICAL for every variant;
+ *  this only picks which mesh `render/terrain.ts` draws. */
+export type ObstacleVariant = 'log' | 'rock'
+
 export interface Obstacle {
   x: number
   y: number
   kind: 'egg'
+  /** Deterministic, seed-driven visual variant (log or rock). See `ObstacleVariant`. */
+  variant: ObstacleVariant
 }
 
 /** A contiguous terrain zone, exposed so tests + later stages can LOCATE a zone
@@ -246,6 +253,14 @@ const ICE_DOWNHILL_SLOPE = 0.05
 /** x positions (absolute) of the canonical egg obstacles. */
 const EGG_X_POSITIONS: readonly number[] = [185, 190, 195, 200, 205]
 
+/**
+ * Fixed seed for the canonical course's obstacle visual variants. The canonical
+ * course itself takes no seed (it's the one fixed hand-tuned track), but variant
+ * assignment still goes through the SAME seeded-PRNG path as the generator (for
+ * one shared, deterministic mechanism) rather than a hardcoded array.
+ */
+const CANONICAL_VARIANT_SEED = 7
+
 function canonicalRockyY(x: number): number {
   const phase = (x - X_FLAT_END) / ROCKY_BUMP_PERIOD
   return BASE_Y + ROCKY_BUMP_AMPLITUDE * Math.sin(2 * Math.PI * phase)
@@ -276,7 +291,13 @@ const CANONICAL_SEGMENTS: SegmentDef[] = [
  */
 export function buildCanonicalCourse(): Course {
   const eggSeg = CANONICAL_SEGMENTS.find((s) => s.kind === 'eggs')!
-  const obstacles: Obstacle[] = EGG_X_POSITIONS.map((x) => ({ x, y: eggSeg.y(x), kind: 'egg' as const }))
+  const variantRng = mulberry32(CANONICAL_VARIANT_SEED)
+  const obstacles: Obstacle[] = EGG_X_POSITIONS.map((x) => ({
+    x,
+    y: eggSeg.y(x),
+    kind: 'egg' as const,
+    variant: pickVariant(variantRng),
+  }))
   return assembleCourse(CANONICAL_SEGMENTS, obstacles, X_START, X_FINISH)
 }
 
@@ -311,6 +332,14 @@ function mulberry32(seed: number): () => number {
 }
 
 type Rng = () => number
+
+/** The two obstacle visual variants, in pick() order (used for the ~50/50 mix). */
+const OBSTACLE_VARIANTS: readonly ObstacleVariant[] = ['log', 'rock']
+
+/** Draw the next obstacle's visual variant from a seeded PRNG (roughly 50/50). */
+function pickVariant(rng: Rng): ObstacleVariant {
+  return pick(rng, OBSTACLE_VARIANTS)
+}
 
 /** Float in [min, max). */
 function randRange(rng: Rng, min: number, max: number): number {
@@ -477,7 +506,12 @@ function eggsZone(rng: Rng, xStart: number, p: DifficultyParams): BuiltZone {
   const len = EGG_LEAD_IN + (count - 1) * EGG_SPACING + EGG_TRAIL
   const obstacles: Obstacle[] = []
   for (let i = 0; i < count; i++) {
-    obstacles.push({ x: xStart + EGG_LEAD_IN + i * EGG_SPACING, y: BASE_Y, kind: 'egg' })
+    obstacles.push({
+      x: xStart + EGG_LEAD_IN + i * EGG_SPACING,
+      y: BASE_Y,
+      kind: 'egg',
+      variant: pickVariant(rng),
+    })
   }
   return {
     seg: { kind: 'eggs', xStart, xEnd: xStart + len, friction: FRICTION_BASE, y: () => BASE_Y },
