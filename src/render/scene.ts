@@ -67,149 +67,155 @@ const MONIGOTE_Z = 0.1
  */
 const TERRAIN_Z = -0.5
 
-/** Chassis box half-extents in metres (matches physics: CHASSIS_HALF_W=1, CHASSIS_HALF_H=0.3). */
+/** Chassis footprint half-extents in metres (matches physics: CHASSIS_HALF_W=1, CHASSIS_HALF_H=0.3). */
 const CHASSIS_HALF_W = 1.0
 const CHASSIS_HALF_H = 0.3
-/** Chassis depth (into/out of the screen); purely visual, no physics counterpart. */
-const CHASSIS_HALF_D = 0.6
 
-/** Monigote body half-extents (metres). */
-const BODY_HALF_W = 0.22
-const BODY_HALF_H = 0.35
-/** Monigote body depth (into/out of the screen); purely visual, no physics counterpart. */
-const BODY_HALF_D = 0.25
+// ─── Scooter (patinete) art constants ──────────────────────────────────────────
+// Extra decoration meshes turn the plain chassis footprint into a charming
+// little kick-scooter silhouette: a rounded deck, a stem rising at the front,
+// and a T-shaped handlebar. They are added as children of `body` but are NOT
+// part of the VehicleMeshes contract — only `chassis` itself is a tracked
+// handle (it points at the deck mesh). Wheels are built and owned separately
+// (see "Wheels" below) and are not touched here.
 
-/** Monigote head radius (metres). */
-const HEAD_RADIUS = 0.2
-
-// ─── Car body art constants ────────────────────────────────────────────────────
-// Extra decoration meshes turn the plain chassis box into a charming little
-// kart silhouette. They are added as children of `body` but are NOT part of
-// the VehicleMeshes contract — only `chassis` itself is a tracked handle.
-
-/** Main body paint — a playful saturated orange instead of flat red. */
-const CAR_BODY_COLOR = 0xff6f3c
-/** Racing-stripe / hood / spoiler-wing accent color. */
-const CAR_ACCENT_COLOR = 0xffd23f
-/**
- * Shared dark trim color — used for the car's bumper, cockpit rim, spoiler
- * strut and exhaust, AND reused for the driver's visor, eyes and smile so
- * the car and driver read as one cohesive livery.
- */
-const CAR_TRIM_COLOR = 0x22223b
-/** Windshield glass color. */
-const CAR_GLASS_COLOR = 0x8ecae6
+/** Deck paint — bright saturated orange. */
+const SCOOTER_DECK_COLOR = 0xff8c42
+/** Shared dark trim — stem body and handlebar bar. */
+const SCOOTER_TRIM_COLOR = 0x2b2d42
+/** Grip / collar accent color. */
+const SCOOTER_ACCENT_COLOR = 0xffd166
 
 /**
- * Overlap depth (metres) used so decoration meshes sink slightly into the
- * chassis instead of touching it edge-on — avoids visible seams.
+ * Deck: a capsule lying on its side so both ends read as rounded (front and
+ * back of the deck) instead of hard corners. `DECK_RADIUS` sets the capsule's
+ * cross-section (i.e. the deck's visual thickness); `DECK_LENGTH` is the
+ * straight midsection length so the two half-sphere caps plus the midsection
+ * span exactly the chassis footprint width (2 * CHASSIS_HALF_W).
  */
-const CAR_EMBED = 0.03
+const DECK_RADIUS = CHASSIS_HALF_H * 0.75
+const DECK_LENGTH = CHASSIS_HALF_W * 2 - DECK_RADIUS * 2
+const DECK_CAP_SEGMENTS = 4
+const DECK_RADIAL_SEGMENTS = 10
+/** Deck vertical position: keeps the deck's underside flush with the physics
+ *  wheel-mount line (-CHASSIS_HALF_H) regardless of the chosen radius. */
+const DECK_OFFSET_Y = -CHASSIS_HALF_H + DECK_RADIUS
 
-/** Hood: a sloped accent panel on the nose half of the chassis. */
-const HOOD_HALF_W = 0.4
-const HOOD_HALF_H = 0.12
-const HOOD_HALF_D = 0.5
-const HOOD_OFFSET_X = 0.4
-const HOOD_OFFSET_Y = CHASSIS_HALF_H + HOOD_HALF_H - CAR_EMBED
-const HOOD_TILT = 0.35 // radians; slopes the nose down for a raked look
+/**
+ * Stem: a vertical post rising from the deck at the front (+x, above the
+ * front wheel) up to the handlebar. `STEM_OFFSET_X` approximates the physics
+ * front wheel's x offset (0.8) as a fraction of the chassis half-width so the
+ * render layer doesn't need to import a physics constant.
+ */
+const STEM_RADIUS = 0.05
+const STEM_HEIGHT = 0.85
+const STEM_SEGMENTS = 8
+const STEM_OFFSET_X = CHASSIS_HALF_W * 0.85
+/** y of the deck's top surface — the stem's base and the rider's foothold. */
+const STEM_BASE_Y = DECK_OFFSET_Y + DECK_RADIUS
+const STEM_OFFSET_Y = STEM_BASE_Y + STEM_HEIGHT / 2
 
-/** Front bumper: a small trim block at the nose. */
-const BUMPER_HALF_W = 0.12
-const BUMPER_HALF_H = 0.14
-const BUMPER_HALF_D = 0.55
-const BUMPER_OFFSET_X = CHASSIS_HALF_W + BUMPER_HALF_W - CAR_EMBED
-const BUMPER_OFFSET_Y = -CHASSIS_HALF_H * 0.25
+/** Collar: a short wide cylinder marking where the stem meets the deck. */
+const STEM_COLLAR_RADIUS = STEM_RADIUS * 2.2
+const STEM_COLLAR_HEIGHT = 0.06
 
-/** Cockpit tub the driver sits in, behind the hood. */
-const COCKPIT_HALF_W = 0.28
-const COCKPIT_HALF_H = 0.16
-const COCKPIT_HALF_D = 0.52
-const COCKPIT_OFFSET_X = -0.2
-const COCKPIT_OFFSET_Y = CHASSIS_HALF_H + COCKPIT_HALF_H - CAR_EMBED
+/** Handlebar: a horizontal bar capping the stem, forming a "T" in side view. */
+const HANDLEBAR_HALF_W = 0.22
+const HANDLEBAR_HALF_H = 0.045
+const HANDLEBAR_HALF_D = STEM_RADIUS * 1.6
+const HANDLEBAR_OFFSET_Y = STEM_BASE_Y + STEM_HEIGHT
 
-/** Windshield: thin raked glass panel bridging hood and cockpit. */
-const WINDSHIELD_HALF_W = 0.04
-const WINDSHIELD_HALF_H = 0.16
-const WINDSHIELD_HALF_D = 0.45
-const WINDSHIELD_OFFSET_X = 0.05
-const WINDSHIELD_OFFSET_Y = COCKPIT_OFFSET_Y + COCKPIT_HALF_H + WINDSHIELD_HALF_H
-const WINDSHIELD_TILT = 0.5
+/** Grip knobs: small rounded caps at each end of the handlebar (the "T-bar"). */
+const GRIP_RADIUS = HANDLEBAR_HALF_H * 2
 
-/** Rear spoiler: a strut holding up a small wing. */
-const SPOILER_STRUT_HALF_W = 0.04
-const SPOILER_STRUT_HALF_H = 0.16
-const SPOILER_STRUT_HALF_D = 0.5
-const SPOILER_STRUT_OFFSET_X = -CHASSIS_HALF_W + SPOILER_STRUT_HALF_W - CAR_EMBED
-const SPOILER_STRUT_OFFSET_Y = CHASSIS_HALF_H + SPOILER_STRUT_HALF_H - CAR_EMBED
-const SPOILER_WING_HALF_W = 0.1
-const SPOILER_WING_HALF_H = 0.04
-const SPOILER_WING_HALF_D = 0.55
-const SPOILER_WING_OFFSET_X = SPOILER_STRUT_OFFSET_X - 0.03
-const SPOILER_WING_OFFSET_Y = SPOILER_STRUT_OFFSET_Y + SPOILER_STRUT_HALF_H + SPOILER_WING_HALF_H
+// ─── Rider (blob) art constants ────────────────────────────────────────────────
+// A cute rounded "soft-bean" mascot standing on the deck and holding the
+// handlebar. Only `monigoteBody` and `monigoteHead` are tracked contract
+// handles; everything else here (eyes, belly, arms, feet) is decoration
+// parented to them or to `body`.
 
-/** Exhaust pipe poking out the back, near the ground. */
-const EXHAUST_RADIUS = 0.06
-const EXHAUST_LENGTH = 0.3
-const EXHAUST_OFFSET_X = -CHASSIS_HALF_W - EXHAUST_LENGTH * 0.35
-const EXHAUST_OFFSET_Y = -CHASSIS_HALF_H * 0.5
+/** Bright saturated body color. */
+const BLOB_BODY_COLOR = 0x5ec8d8
+/** Lighter belly-patch color. */
+const BLOB_BELLY_COLOR = 0xcdf3f7
+/** Eyes + mouth color — reuses the scooter trim color so rider and scooter
+ *  read as one cohesive palette. */
+const BLOB_EYE_COLOR = SCOOTER_TRIM_COLOR
+/** Tiny specular highlight dot on each eye. */
+const BLOB_HIGHLIGHT_COLOR = 0xffffff
 
-/** Racing stripe painted along the top of the chassis. */
-const STRIPE_HALF_W = CHASSIS_HALF_W * 0.85
-const STRIPE_HALF_H = 0.03
-const STRIPE_HALF_D = 0.1
-const STRIPE_OFFSET_Y = CHASSIS_HALF_H + STRIPE_HALF_H - CAR_EMBED
+/** Slightly glossy finish shared by all blob parts (see MeshStandardMaterial). */
+const BLOB_ROUGHNESS = 0.35
+/** Eyes are glossier than the body/belly — reads as a wet, glassy highlight. */
+const EYE_ROUGHNESS = 0.15
+const BLOB_METALNESS = 0
 
-// ─── Character (monigote) art constants ────────────────────────────────────────
-// Extra decoration meshes (helmet, visor, eyes, smile, arms, steering wheel)
-// turn the plain box-and-sphere monigote into a charming little driver. Only
-// `monigoteBody` and `monigoteHead` are tracked contract handles; everything
-// else here is decoration parented to them or to `body`.
+/**
+ * Overlap depth (metres) used so decoration meshes (head into body, etc.)
+ * sink slightly into their parent instead of touching it edge-on — avoids
+ * visible seams.
+ */
+const BLOB_EMBED = 0.03
 
-/** Driver racing-suit color. */
-const DRIVER_SUIT_COLOR = 0x2ec4b6
-/** Driver skin tone. */
-const DRIVER_SKIN_COLOR = 0xffd3a8
+/** Head radius (metres) — big relative to the body for a cute mascot look. */
+const HEAD_RADIUS = 0.34
 
-/** Helmet dome, slightly larger than the head so it reads as worn over it. */
-const HELMET_RADIUS = HEAD_RADIUS * 1.2
-/** How far down the sphere the helmet dome extends (from the top pole, in radians). */
-const HELMET_THETA_LENGTH = Math.PI * 0.62
-const HELMET_OFFSET_Y = HEAD_RADIUS * 0.15
+/** Body: an upright capsule (rounded "bean" torso). */
+const BLOB_BODY_RADIUS = 0.3
+const BLOB_BODY_LENGTH = 0.22
+const BLOB_CAP_SEGMENTS = 4
+const BLOB_RADIAL_SEGMENTS = 10
+/** Stands toward the rear-middle of the deck, leaving the stem clear at the front. */
+const BLOB_BODY_OFFSET_X = -CHASSIS_HALF_W * 0.3
+const BLOB_BODY_OFFSET_Y = STEM_BASE_Y + BLOB_BODY_LENGTH / 2 + BLOB_BODY_RADIUS
 
-/** Visor brim across the front-top of the helmet, above the eyes. */
-const VISOR_HALF_W = HEAD_RADIUS * 0.75
-const VISOR_HALF_H = HEAD_RADIUS * 0.18
-const VISOR_HALF_D = HEAD_RADIUS * 0.15
-const VISOR_OFFSET_Y = HEAD_RADIUS * 0.55
-const VISOR_OFFSET_Z = HEAD_RADIUS * 0.95
+/** Head sits on top of the body, sunk in slightly to avoid a seam. */
+const BLOB_HEAD_OFFSET_Y =
+  BLOB_BODY_OFFSET_Y + BLOB_BODY_LENGTH / 2 + BLOB_BODY_RADIUS + HEAD_RADIUS - BLOB_EMBED
 
-/** Eyes: two small dark spheres on the camera-facing side of the head. */
-const EYE_RADIUS = HEAD_RADIUS * 0.14
+/** Belly: a flattened patch on the camera-facing side of the body. */
+const BELLY_RADIUS = BLOB_BODY_RADIUS * 0.65
+/** Scale applied to the belly sphere's z-extent so it hugs the body surface. */
+const BELLY_FLATTEN = 0.35
+const BELLY_OFFSET_Z = BLOB_BODY_RADIUS * 0.85
+const BELLY_OFFSET_Y = BLOB_BODY_OFFSET_Y - BLOB_BODY_RADIUS * 0.1
+
+/** Eyes: two big glossy spheres on the camera-facing side of the head. */
+const EYE_RADIUS = HEAD_RADIUS * 0.26
 const EYE_OFFSET_X = HEAD_RADIUS * 0.42
-const EYE_OFFSET_Y = HEAD_RADIUS * 0.1
-const EYE_OFFSET_Z = HEAD_RADIUS * 0.92
+const EYE_OFFSET_Y = HEAD_RADIUS * 0.08
+const EYE_OFFSET_Z = HEAD_RADIUS * 0.88
 
-/** Smile: the bottom arc of a thin torus reads as a simple curved grin. */
-const MOUTH_RADIUS = HEAD_RADIUS * 0.35
-const MOUTH_TUBE = HEAD_RADIUS * 0.06
-const MOUTH_ARC = Math.PI * 0.6
-const MOUTH_OFFSET_Y = -HEAD_RADIUS * 0.25
-const MOUTH_OFFSET_Z = HEAD_RADIUS * 0.92
+/** Highlight dot: tiny bright sphere offset toward the light on each eye. */
+const HIGHLIGHT_RADIUS = EYE_RADIUS * 0.35
+const HIGHLIGHT_OFFSET_X = EYE_RADIUS * 0.4
+const HIGHLIGHT_OFFSET_Y = EYE_RADIUS * 0.4
+const HIGHLIGHT_OFFSET_Z = EYE_RADIUS * 0.55
 
-/** Arms reach forward from the shoulders toward the steering wheel. */
-const ARM_RADIUS = 0.05
-const ARM_LENGTH = 0.4
-const ARM_TILT = -0.9 // radians; tilts the cylinder from vertical to reach forward-down
-const ARM_Z_OFFSET = BODY_HALF_D * 0.9
-const ARM_OFFSET_X = COCKPIT_OFFSET_X + 0.35
-const ARM_OFFSET_Y = CHASSIS_HALF_H + 0.32
+/** Mouth: the bottom arc of a thin torus reads as a simple curved smile. */
+const MOUTH_RADIUS = HEAD_RADIUS * 0.22
+const MOUTH_TUBE = HEAD_RADIUS * 0.05
+const MOUTH_ARC = Math.PI * 0.55
+const MOUTH_OFFSET_Y = -HEAD_RADIUS * 0.28
+const MOUTH_OFFSET_Z = HEAD_RADIUS * 0.9
 
-/** Small steering wheel the arms reach toward. */
-const STEERING_WHEEL_RADIUS = 0.16
-const STEERING_WHEEL_TUBE = 0.03
-const STEERING_WHEEL_OFFSET_X = COCKPIT_OFFSET_X + 0.55
-const STEERING_WHEEL_OFFSET_Y = CHASSIS_HALF_H + 0.3
+/** Stub arms reach forward from the shoulders toward the handlebar. */
+const ARM_RADIUS = 0.07
+const ARM_LENGTH = 0.26
+const ARM_CAP_SEGMENTS = 4
+const ARM_RADIAL_SEGMENTS = 6
+const ARM_TILT = -0.4 // radians; tilts the stub from vertical toward the (raised) handlebar
+const ARM_OFFSET_X = BLOB_BODY_OFFSET_X + BLOB_BODY_RADIUS * 0.6
+const ARM_OFFSET_Y = BLOB_BODY_OFFSET_Y + BLOB_BODY_LENGTH / 2
+const ARM_Z_OFFSET = BLOB_BODY_RADIUS * 0.8
+
+/** Tiny feet: flattened spheres resting on the deck under the body. */
+const FOOT_RADIUS = 0.12
+/** Scale applied to the foot sphere's y-extent so it reads as a squashed pad. */
+const FOOT_FLATTEN = 0.55
+const FOOT_OFFSET_X = BLOB_BODY_OFFSET_X
+const FOOT_OFFSET_Y = STEM_BASE_Y + FOOT_RADIUS * FOOT_FLATTEN * 0.6
+const FOOT_Z_OFFSET = BLOB_BODY_RADIUS * 0.55
 
 /** Pixel ratio cap to limit GPU load on high-DPI mobile. */
 const MAX_PIXEL_RATIO = 2
@@ -504,9 +510,9 @@ export function createScene(course: Course): Scene3D {
 // ─── Internal builders ────────────────────────────────────────────────────────
 
 /**
- * Build the vehicle mesh group: a decorated low-poly kart chassis, two
- * wheels, and a charming little "monigote" driver (body + head + helmet +
- * face + arms) seated on top of the chassis.
+ * Build the vehicle mesh group: a rounded kick-scooter (deck + stem +
+ * handlebar), two wheels, and a cute rounded "blob" rider (body + head +
+ * face + stub arms + feet) standing on the deck holding the handlebar.
  *
  * All meshes are in group-local space (group is repositioned each sync to
  * match the chassis rigid body position). Wheels are also in group-local space
@@ -515,99 +521,62 @@ export function createScene(course: Course): Scene3D {
 function buildVehicleMeshes(): VehicleMeshes {
   const group = new THREE.Group()
 
-  // Chassis + monigote live in this sub-group so they tilt together with the
-  // car's angle; wheels stay direct children of `group` (world-positioned).
+  // Scooter + rider live in this sub-group so they tilt together with the
+  // chassis angle; wheels stay direct children of `group` (world-positioned).
   const body = new THREE.Group()
   group.add(body)
 
-  // ── Chassis ──────────────────────────────────────────────────────────────
-  // Keeps the exact physics footprint (2*CHASSIS_HALF_W x 2*CHASSIS_HALF_H x
-  // 2*CHASSIS_HALF_D) so the car visually rests on its wheels correctly; the
-  // "kart" charm comes entirely from the extra decoration meshes below.
-  const chassisGeo = new THREE.BoxGeometry(
-    CHASSIS_HALF_W * 2,
-    CHASSIS_HALF_H * 2,
-    CHASSIS_HALF_D * 2,
+  // ── Deck ─────────────────────────────────────────────────────────────────
+  // A capsule lying along x so both ends read as rounded; spans the exact
+  // chassis footprint width (2 * CHASSIS_HALF_W) so it visually rests on the
+  // wheels correctly. `chassis` is the tracked contract handle for this mesh.
+  const deckGeo = new THREE.CapsuleGeometry(
+    DECK_RADIUS,
+    DECK_LENGTH,
+    DECK_CAP_SEGMENTS,
+    DECK_RADIAL_SEGMENTS,
   )
-  const chassisMat = new THREE.MeshLambertMaterial({ color: CAR_BODY_COLOR })
-  const chassis = new THREE.Mesh(chassisGeo, chassisMat)
-  chassis.position.set(0, 0, CHASSIS_Z)
+  deckGeo.rotateZ(Math.PI / 2) // default capsule axis is y; lay it flat along x
+  const deckMat = new THREE.MeshLambertMaterial({ color: SCOOTER_DECK_COLOR })
+  const chassis = new THREE.Mesh(deckGeo, deckMat)
+  chassis.position.set(0, DECK_OFFSET_Y, CHASSIS_Z)
   body.add(chassis)
 
-  // ── Car decoration ───────────────────────────────────────────────────────
+  // ── Stem + handlebar ─────────────────────────────────────────────────────
   // Purely cosmetic extra meshes (not part of the VehicleMeshes contract):
-  // hood, front bumper, cockpit tub, windshield, rear spoiler, exhaust and a
-  // racing stripe. Materials are shared across meshes of the same color —
-  // cheap and never mutated at runtime.
-  const trimMat = new THREE.MeshLambertMaterial({ color: CAR_TRIM_COLOR })
-  const accentMat = new THREE.MeshLambertMaterial({ color: CAR_ACCENT_COLOR })
+  // a vertical stem at the front topped by a horizontal handlebar bar with
+  // grip knobs, forming a "T" in side view. Materials are shared across
+  // meshes of the same color — cheap and never mutated at runtime.
+  const trimMat = new THREE.MeshLambertMaterial({ color: SCOOTER_TRIM_COLOR })
+  const accentMat = new THREE.MeshLambertMaterial({ color: SCOOTER_ACCENT_COLOR })
 
-  const hood = new THREE.Mesh(
-    new THREE.BoxGeometry(HOOD_HALF_W * 2, HOOD_HALF_H * 2, HOOD_HALF_D * 2),
+  const stemCollar = new THREE.Mesh(
+    new THREE.CylinderGeometry(STEM_COLLAR_RADIUS, STEM_COLLAR_RADIUS, STEM_COLLAR_HEIGHT, STEM_SEGMENTS),
     accentMat,
   )
-  hood.position.set(HOOD_OFFSET_X, HOOD_OFFSET_Y, CHASSIS_Z)
-  hood.rotation.z = -HOOD_TILT
-  body.add(hood)
+  stemCollar.position.set(STEM_OFFSET_X, STEM_BASE_Y, CHASSIS_Z)
+  body.add(stemCollar)
 
-  const bumper = new THREE.Mesh(
-    new THREE.BoxGeometry(BUMPER_HALF_W * 2, BUMPER_HALF_H * 2, BUMPER_HALF_D * 2),
+  const stem = new THREE.Mesh(
+    new THREE.CylinderGeometry(STEM_RADIUS, STEM_RADIUS, STEM_HEIGHT, STEM_SEGMENTS),
     trimMat,
   )
-  bumper.position.set(BUMPER_OFFSET_X, BUMPER_OFFSET_Y, CHASSIS_Z)
-  body.add(bumper)
+  stem.position.set(STEM_OFFSET_X, STEM_OFFSET_Y, CHASSIS_Z)
+  body.add(stem)
 
-  const cockpit = new THREE.Mesh(
-    new THREE.BoxGeometry(COCKPIT_HALF_W * 2, COCKPIT_HALF_H * 2, COCKPIT_HALF_D * 2),
+  const handlebar = new THREE.Mesh(
+    new THREE.BoxGeometry(HANDLEBAR_HALF_W * 2, HANDLEBAR_HALF_H * 2, HANDLEBAR_HALF_D * 2),
     trimMat,
   )
-  cockpit.position.set(COCKPIT_OFFSET_X, COCKPIT_OFFSET_Y, CHASSIS_Z)
-  body.add(cockpit)
+  handlebar.position.set(STEM_OFFSET_X, HANDLEBAR_OFFSET_Y, CHASSIS_Z)
+  body.add(handlebar)
 
-  const windshield = new THREE.Mesh(
-    new THREE.BoxGeometry(WINDSHIELD_HALF_W * 2, WINDSHIELD_HALF_H * 2, WINDSHIELD_HALF_D * 2),
-    new THREE.MeshLambertMaterial({ color: CAR_GLASS_COLOR }),
-  )
-  windshield.position.set(WINDSHIELD_OFFSET_X, WINDSHIELD_OFFSET_Y, CHASSIS_Z)
-  windshield.rotation.z = -WINDSHIELD_TILT
-  body.add(windshield)
-
-  const spoilerStrut = new THREE.Mesh(
-    new THREE.BoxGeometry(
-      SPOILER_STRUT_HALF_W * 2,
-      SPOILER_STRUT_HALF_H * 2,
-      SPOILER_STRUT_HALF_D * 2,
-    ),
-    trimMat,
-  )
-  spoilerStrut.position.set(SPOILER_STRUT_OFFSET_X, SPOILER_STRUT_OFFSET_Y, CHASSIS_Z)
-  body.add(spoilerStrut)
-
-  const spoilerWing = new THREE.Mesh(
-    new THREE.BoxGeometry(
-      SPOILER_WING_HALF_W * 2,
-      SPOILER_WING_HALF_H * 2,
-      SPOILER_WING_HALF_D * 2,
-    ),
-    accentMat,
-  )
-  spoilerWing.position.set(SPOILER_WING_OFFSET_X, SPOILER_WING_OFFSET_Y, CHASSIS_Z)
-  body.add(spoilerWing)
-
-  const exhaust = new THREE.Mesh(
-    new THREE.CylinderGeometry(EXHAUST_RADIUS, EXHAUST_RADIUS, EXHAUST_LENGTH, 8),
-    trimMat,
-  )
-  exhaust.position.set(EXHAUST_OFFSET_X, EXHAUST_OFFSET_Y, CHASSIS_Z)
-  exhaust.rotation.z = Math.PI / 2 // cylinder axis (default y) now points along x
-  body.add(exhaust)
-
-  const stripe = new THREE.Mesh(
-    new THREE.BoxGeometry(STRIPE_HALF_W * 2, STRIPE_HALF_H * 2, STRIPE_HALF_D * 2),
-    accentMat,
-  )
-  stripe.position.set(0, STRIPE_OFFSET_Y, CHASSIS_Z)
-  body.add(stripe)
+  const gripGeo = new THREE.SphereGeometry(GRIP_RADIUS, 8, 6)
+  for (const side of [-1, 1]) {
+    const grip = new THREE.Mesh(gripGeo, accentMat)
+    grip.position.set(STEM_OFFSET_X + side * HANDLEBAR_HALF_W, HANDLEBAR_OFFSET_Y, CHASSIS_Z)
+    body.add(grip)
+  }
 
   // ── Wheels ───────────────────────────────────────────────────────────────
   // Start as circle wheels; geometry and color are swapped in sync() when
@@ -633,67 +602,84 @@ function buildVehicleMeshes(): VehicleMeshes {
     spokes.push(spoke)
   }
 
-  // ── Monigote body ─────────────────────────────────────────────────────────
-  const bodyGeo = new THREE.BoxGeometry(BODY_HALF_W * 2, BODY_HALF_H * 2, BODY_HALF_D * 2)
-  const bodyMat = new THREE.MeshLambertMaterial({ color: DRIVER_SUIT_COLOR })
+  // ── Blob body ────────────────────────────────────────────────────────────
+  // An upright capsule reads as a chunky rounded "bean" torso. Slightly
+  // glossy (MeshStandardMaterial) — the scene's hemisphere + directional
+  // lights give it a soft sheen.
+  const bodyGeo = new THREE.CapsuleGeometry(
+    BLOB_BODY_RADIUS,
+    BLOB_BODY_LENGTH,
+    BLOB_CAP_SEGMENTS,
+    BLOB_RADIAL_SEGMENTS,
+  )
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: BLOB_BODY_COLOR,
+    roughness: BLOB_ROUGHNESS,
+    metalness: BLOB_METALNESS,
+  })
   const monigoteBody = new THREE.Mesh(bodyGeo, bodyMat)
-  // Seat on top of chassis, tucked into the cockpit tub (chassis top edge = CHASSIS_HALF_H).
-  monigoteBody.position.set(COCKPIT_OFFSET_X, CHASSIS_HALF_H + BODY_HALF_H, MONIGOTE_Z)
+  // Stand on the deck, toward the rear-middle (front is reserved for the stem).
+  monigoteBody.position.set(BLOB_BODY_OFFSET_X, BLOB_BODY_OFFSET_Y, MONIGOTE_Z)
   body.add(monigoteBody)
 
-  // ── Monigote head + face ─────────────────────────────────────────────────
-  const headGeo = new THREE.SphereGeometry(HEAD_RADIUS, 8, 6)
-  const headMat = new THREE.MeshLambertMaterial({ color: DRIVER_SKIN_COLOR })
-  const monigoteHead = new THREE.Mesh(headGeo, headMat)
-  // Sits on top of the body
-  monigoteHead.position.set(
-    COCKPIT_OFFSET_X,
-    CHASSIS_HALF_H + BODY_HALF_H * 2 + HEAD_RADIUS,
-    MONIGOTE_Z,
+  // Belly patch: a flattened lighter sphere hugging the camera-facing side.
+  const belly = new THREE.Mesh(
+    new THREE.SphereGeometry(BELLY_RADIUS, 8, 6),
+    new THREE.MeshStandardMaterial({
+      color: BLOB_BELLY_COLOR,
+      roughness: BLOB_ROUGHNESS,
+      metalness: BLOB_METALNESS,
+    }),
   )
+  belly.position.set(BLOB_BODY_OFFSET_X, BELLY_OFFSET_Y, MONIGOTE_Z + BELLY_OFFSET_Z)
+  belly.scale.z = BELLY_FLATTEN
+  body.add(belly)
+
+  // ── Blob head + face ─────────────────────────────────────────────────────
+  // Reuses bodyMat: mascots like this read as a single-color bean with only
+  // the belly patch lighter, so the head shares the body's color and finish.
+  const headGeo = new THREE.SphereGeometry(HEAD_RADIUS, 10, 8)
+  const monigoteHead = new THREE.Mesh(headGeo, bodyMat)
+  // Sits on top of the body, sunk in slightly to avoid a visible seam.
+  monigoteHead.position.set(BLOB_BODY_OFFSET_X, BLOB_HEAD_OFFSET_Y, MONIGOTE_Z)
   body.add(monigoteHead)
 
-  // Helmet: a dome covering the top of the head, plus a small forward brim.
-  // Reuses accentMat (same color as the hood/spoiler) so car and driver read
-  // as one team livery.
-  const helmet = new THREE.Mesh(
-    new THREE.SphereGeometry(HELMET_RADIUS, 8, 6, 0, Math.PI * 2, 0, HELMET_THETA_LENGTH),
-    accentMat,
-  )
-  helmet.position.set(0, HELMET_OFFSET_Y, 0)
-  monigoteHead.add(helmet)
-
-  const visor = new THREE.Mesh(
-    new THREE.BoxGeometry(VISOR_HALF_W * 2, VISOR_HALF_H * 2, VISOR_HALF_D * 2),
-    trimMat,
-  )
-  visor.position.set(0, VISOR_OFFSET_Y, VISOR_OFFSET_Z)
-  monigoteHead.add(visor)
-
-  // Eyes + smile sit on the camera-facing side of the head (+z) — the fixed
+  // Eyes sit on the camera-facing side of the head (+z) — the fixed
   // orthographic camera looks down -z, so this is the side that actually
-  // reads on screen; the small +x spread also nods toward the car's +x
-  // direction of travel.
-  const eyeGeo = new THREE.SphereGeometry(EYE_RADIUS, 6, 6)
+  // reads on screen; the small +x spread also nods toward the +x direction
+  // of travel. Glossier than the body/belly for a wet, glassy look, with a
+  // tiny bright highlight dot offset toward the light.
+  const eyeMat = new THREE.MeshStandardMaterial({
+    color: BLOB_EYE_COLOR,
+    roughness: EYE_ROUGHNESS,
+    metalness: BLOB_METALNESS,
+  })
+  const highlightMat = new THREE.MeshBasicMaterial({ color: BLOB_HIGHLIGHT_COLOR })
+  const eyeGeo = new THREE.SphereGeometry(EYE_RADIUS, 8, 6)
+  const highlightGeo = new THREE.SphereGeometry(HIGHLIGHT_RADIUS, 6, 6)
   for (const side of [-1, 1]) {
-    const eye = new THREE.Mesh(eyeGeo, trimMat)
+    const eye = new THREE.Mesh(eyeGeo, eyeMat)
     eye.position.set(side * EYE_OFFSET_X, EYE_OFFSET_Y, EYE_OFFSET_Z)
     monigoteHead.add(eye)
+
+    const highlight = new THREE.Mesh(highlightGeo, highlightMat)
+    highlight.position.set(HIGHLIGHT_OFFSET_X, HIGHLIGHT_OFFSET_Y, HIGHLIGHT_OFFSET_Z)
+    eye.add(highlight)
   }
 
-  // Smile: the bottom arc of a thin torus reads as a simple curved grin.
+  // Mouth: the bottom arc of a thin torus reads as a simple curved smile.
   const mouth = new THREE.Mesh(
     new THREE.TorusGeometry(MOUTH_RADIUS, MOUTH_TUBE, 6, 12, MOUTH_ARC),
-    trimMat,
+    eyeMat,
   )
   mouth.position.set(0, MOUTH_OFFSET_Y, MOUTH_OFFSET_Z)
   mouth.rotation.z = -Math.PI / 2 - MOUTH_ARC / 2 // centers the arc at the bottom of the ring
   monigoteHead.add(mouth)
 
-  // ── Arms + steering wheel ────────────────────────────────────────────────
-  // Little arms reaching forward as if holding the wheel; reuses bodyMat
-  // (same suit color) since they're an extension of the torso.
-  const armGeo = new THREE.CylinderGeometry(ARM_RADIUS, ARM_RADIUS, ARM_LENGTH, 6)
+  // ── Stub arms ────────────────────────────────────────────────────────────
+  // Tiny stub arms reaching forward toward the (raised) handlebar; reuses
+  // bodyMat since they're an extension of the torso.
+  const armGeo = new THREE.CapsuleGeometry(ARM_RADIUS, ARM_LENGTH, ARM_CAP_SEGMENTS, ARM_RADIAL_SEGMENTS)
   for (const side of [-1, 1]) {
     const arm = new THREE.Mesh(armGeo, bodyMat)
     arm.position.set(ARM_OFFSET_X, ARM_OFFSET_Y, MONIGOTE_Z + side * ARM_Z_OFFSET)
@@ -701,12 +687,15 @@ function buildVehicleMeshes(): VehicleMeshes {
     body.add(arm)
   }
 
-  const steeringWheel = new THREE.Mesh(
-    new THREE.TorusGeometry(STEERING_WHEEL_RADIUS, STEERING_WHEEL_TUBE, 6, 10),
-    trimMat,
-  )
-  steeringWheel.position.set(STEERING_WHEEL_OFFSET_X, STEERING_WHEEL_OFFSET_Y, MONIGOTE_Z)
-  body.add(steeringWheel)
+  // ── Feet ─────────────────────────────────────────────────────────────────
+  // Tiny flattened-sphere pads resting on the deck under the body.
+  const footGeo = new THREE.SphereGeometry(FOOT_RADIUS, 8, 6)
+  for (const side of [-1, 1]) {
+    const foot = new THREE.Mesh(footGeo, bodyMat)
+    foot.position.set(FOOT_OFFSET_X, FOOT_OFFSET_Y, MONIGOTE_Z + side * FOOT_Z_OFFSET)
+    foot.scale.y = FOOT_FLATTEN
+    body.add(foot)
+  }
 
   return { group, body, chassis, wheels, spokes, monigoteBody, monigoteHead }
 }
