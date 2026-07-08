@@ -272,25 +272,41 @@ const BELLY_FLATTEN = 0.35
 const BELLY_OFFSET_Z = BLOB_BODY_RADIUS * 0.85
 const BELLY_OFFSET_Y = BLOB_BODY_OFFSET_Y - BLOB_BODY_RADIUS * 0.1
 
-/** Eyes: two big glossy spheres on the camera-facing side of the head — sized
- *  to be clearly readable, placed high on the face and spaced apart. */
+/**
+ * Eyes: two big glossy spheres on the FRONT of the head (+x — the scooter's
+ * direction of travel), sized to be clearly readable and placed high on the
+ * face. `EYE_OFFSET_X` is the dominant forward offset (how far the eyes sit
+ * toward the front of the head, replacing the old camera-facing +z offset);
+ * `EYE_SPREAD_Z` fans the pair apart from side to side — now expressed on z
+ * instead of x, since the face turned to look down +x. `EYE_FORWARD_BIAS_Z`
+ * nudges both eyes a touch further toward +z (the camera's near side — see
+ * CAM_VIEW_DIR, a near-side-on 3/4 angle) so the near eye reads clearly and
+ * the far eye isn't fully swallowed by the head's own curvature — a 3/4
+ * forward look rather than a flat profile that would hide it.
+ */
 const EYE_RADIUS = HEAD_RADIUS * 0.32
-const EYE_OFFSET_X = HEAD_RADIUS * 0.42
+const EYE_OFFSET_X = HEAD_RADIUS * 0.88
 const EYE_OFFSET_Y = HEAD_RADIUS * 0.15
-const EYE_OFFSET_Z = HEAD_RADIUS * 0.88
+const EYE_SPREAD_Z = HEAD_RADIUS * 0.28
+const EYE_FORWARD_BIAS_Z = HEAD_RADIUS * 0.12
 
-/** Highlight dot: tiny bright sphere offset toward the light on each eye. */
+/** Highlight dot: tiny bright sphere offset toward the light on each eye, in
+ *  the eye's own local space (forward-dominant on x, matching the eye's new
+ *  forward-facing orientation). */
 const HIGHLIGHT_RADIUS = EYE_RADIUS * 0.35
-const HIGHLIGHT_OFFSET_X = EYE_RADIUS * 0.4
+const HIGHLIGHT_OFFSET_X = EYE_RADIUS * 0.55
 const HIGHLIGHT_OFFSET_Y = EYE_RADIUS * 0.4
-const HIGHLIGHT_OFFSET_Z = EYE_RADIUS * 0.55
+const HIGHLIGHT_OFFSET_Z = EYE_RADIUS * 0.4
 
-/** Mouth: the bottom arc of a thin torus reads as a simple curved smile. */
+/** Mouth: the bottom arc of a thin torus reads as a simple curved smile,
+ *  centered on the same forward-facing sagittal plane as the eyes
+ *  (EYE_FORWARD_BIAS_Z) so it sits right below them on the front of the
+ *  head. */
 const MOUTH_RADIUS = HEAD_RADIUS * 0.22
 const MOUTH_TUBE = HEAD_RADIUS * 0.05
 const MOUTH_ARC = Math.PI * 0.55
+const MOUTH_OFFSET_X = HEAD_RADIUS * 0.9
 const MOUTH_OFFSET_Y = -HEAD_RADIUS * 0.28
-const MOUTH_OFFSET_Z = HEAD_RADIUS * 0.9
 
 /** Stub arms reach forward from the shoulders toward the handlebar — kept
  *  small (fractions of the body radius) so they stay tiny stubs even as the
@@ -1019,11 +1035,14 @@ function buildVehicleMeshes(): VehicleMeshes {
   monigoteHead.position.set(BLOB_BODY_OFFSET_X, BLOB_HEAD_OFFSET_Y, MONIGOTE_Z)
   body.add(monigoteHead)
 
-  // Eyes sit on the camera-facing side of the head (+z) — the fixed
-  // orthographic camera looks down -z, so this is the side that actually
-  // reads on screen; the small +x spread also nods toward the +x direction
-  // of travel. Glossier than the body/belly for a wet, glassy look, with a
-  // tiny bright highlight dot offset toward the light.
+  // Eyes sit on the FRONT of the head (+x — the scooter's direction of
+  // travel), not the camera-facing +z side: the rider looks where it's
+  // going, not at the player. The camera (CAM_VIEW_DIR) is a near-side-on
+  // 3/4 angle, so EYE_FORWARD_BIAS_Z nudges the pair slightly toward +z to
+  // keep the near eye clearly lit and stop the far eye from being fully
+  // hidden behind the head's own curvature. Glossier than the body/belly
+  // for a wet, glassy look, with a tiny bright highlight dot offset toward
+  // the light.
   const eyeMat = new THREE.MeshStandardMaterial({
     color: BLOB_EYE_COLOR,
     roughness: EYE_ROUGHNESS,
@@ -1034,7 +1053,7 @@ function buildVehicleMeshes(): VehicleMeshes {
   const highlightGeo = new THREE.SphereGeometry(HIGHLIGHT_RADIUS, 6, 6)
   for (const side of [-1, 1]) {
     const eye = new THREE.Mesh(eyeGeo, eyeMat)
-    eye.position.set(side * EYE_OFFSET_X, EYE_OFFSET_Y, EYE_OFFSET_Z)
+    eye.position.set(EYE_OFFSET_X, EYE_OFFSET_Y, EYE_FORWARD_BIAS_Z + side * EYE_SPREAD_Z)
     monigoteHead.add(eye)
 
     const highlight = new THREE.Mesh(highlightGeo, highlightMat)
@@ -1042,12 +1061,13 @@ function buildVehicleMeshes(): VehicleMeshes {
     eye.add(highlight)
   }
 
-  // Mouth: the bottom arc of a thin torus reads as a simple curved smile.
+  // Mouth: the bottom arc of a thin torus reads as a simple curved smile,
+  // on the same forward-facing sagittal plane as the eyes.
   const mouth = new THREE.Mesh(
     new THREE.TorusGeometry(MOUTH_RADIUS, MOUTH_TUBE, 6, 12, MOUTH_ARC),
     eyeMat,
   )
-  mouth.position.set(0, MOUTH_OFFSET_Y, MOUTH_OFFSET_Z)
+  mouth.position.set(MOUTH_OFFSET_X, MOUTH_OFFSET_Y, EYE_FORWARD_BIAS_Z)
   mouth.rotation.z = -Math.PI / 2 - MOUTH_ARC / 2 // centers the arc at the bottom of the ring
   monigoteHead.add(mouth)
 
