@@ -69,10 +69,13 @@ describe('wheelGeometry', () => {
     geo.dispose()
   })
 
-  it('line geometry has 24 vertices (BoxGeometry flat bar)', () => {
+  it('line geometry has vertices for a rounded capsule roller (many more than a flat bar)', () => {
     const geo = wheelGeometry('line')
     const pos = geo.getAttribute('position')
-    expect(pos.count).toBe(24)
+    // CapsuleGeometry with cap/radial subdivisions produces far more vertices
+    // than the old 24-vertex flat BoxGeometry bar — that density is exactly
+    // what gives it rounded, non-flat-faceted ends at any spin angle.
+    expect(pos.count).toBeGreaterThan(24)
     geo.dispose()
   })
 
@@ -189,13 +192,19 @@ describe('wheelGeometryBounds', () => {
     expect(height).toBeCloseTo(r * 2, 5)
   })
 
-  it('line bounds: width > height (wide flat bar)', () => {
+  it('line bounds: width > height (elongated rounded roller)', () => {
     const { width, height } = wheelGeometryBounds('line', r)
     expect(width).toBeGreaterThan(height)
-    // Width should be 6× r (3× diameter)
+    // Width (overall end-to-end length) should be 6× r, same reach as the
+    // old flat bar.
     expect(width).toBeCloseTo(r * 6, 5)
-    // Height should be < r (thin)
-    expect(height).toBeLessThan(r)
+    // Height (cross-section diameter) is a full wheel radius — clearly
+    // thicker than the old flat bar (which was 0.4× r tall) so it reads as
+    // a solid roller — while still narrower than the circle/square's own
+    // diameter (2r), keeping the "line" shape visually distinct.
+    expect(height).toBeCloseTo(r, 5)
+    expect(height).toBeGreaterThan(r * 0.4)
+    expect(height).toBeLessThan(r * 2)
   })
 
   it('triangle bounds: width = height = 2r', () => {

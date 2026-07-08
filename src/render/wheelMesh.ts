@@ -5,7 +5,10 @@
  *   circle   → CylinderGeometry (disc, axis aligned with z)
  *   square   → BoxGeometry (equal width × height × depth)
  *   triangle → Triangular prism (extruded isosceles triangle)
- *   line     → Thin flat bar (wide × thin × medium depth BoxGeometry)
+ *   line     → CapsuleGeometry (elongated rounded roller — real thickness and
+ *              rounded ends, so it reads as a solid rolling shape rather than
+ *              a thin stick at any spin angle; wheels are motor-driven and
+ *              spin continuously)
  *
  * All shapes are sized consistently around WHEEL_VISUAL_RADIUS so they
  * appear the same "size" on screen even though their bounding boxes differ.
@@ -32,6 +35,30 @@ const WHEEL_DEPTH = 1.0
 
 /** Radial segments for the circle disc cylinder. */
 const CIRCLE_SEGMENTS = 16
+
+/**
+ * 'line' wheel — solid rounded roller (CapsuleGeometry) tuning.
+ *
+ * The capsule's cross-section RADIUS sets its thickness; its total end-to-end
+ * LENGTH (straight segment + the two rounded end caps) sets its "long" reach.
+ * Both are named as a single source of truth shared by `wheelGeometry` (the
+ * real Three.js geometry) and `wheelGeometryBounds` (the pure bounding-box
+ * data used by tests), so the two never drift apart.
+ */
+/** Cross-section (thickness) radius — a full diameter of one WHEEL_VISUAL_RADIUS,
+ *  clearly thicker than the old thin bar (which was 0.4× the radius tall) so the
+ *  shape reads as a solid roller, not a sliver, at any spin angle. */
+const LINE_RADIUS = WHEEL_VISUAL_RADIUS * 0.5
+/** Overall end-to-end length — matches the old flat bar's width (3× the wheel
+ *  diameter) so the shape keeps the same "long" silhouette on screen. */
+const LINE_LENGTH = WHEEL_VISUAL_RADIUS * 6
+/** Straight cylindrical segment fed to CapsuleGeometry: overall length minus
+ *  the two rounded hemispherical end caps (each LINE_RADIUS deep). */
+const LINE_SEGMENT_LENGTH = LINE_LENGTH - 2 * LINE_RADIUS
+/** Hemispherical end-cap subdivision — smooth enough to read as rounded. */
+const LINE_CAP_SEGMENTS = 4
+/** Radial subdivision around the roller's cross-section. */
+const LINE_RADIAL_SEGMENTS = 12
 
 /**
  * Triangular prism geometry data.
@@ -109,9 +136,14 @@ export function wheelGeometryBounds(
       return { width: r * 2, height: r * 2, depth: WHEEL_DEPTH }
     case 'triangle':
       return { width: r * 2, height: r * 2, depth: WHEEL_DEPTH }
-    case 'line':
-      // Line/ski: wide (3× diameter) and very thin
-      return { width: r * 2 * 3, height: r * 0.4, depth: WHEEL_DEPTH }
+    case 'line': {
+      // Line: elongated rounded roller — wide (matches the old bar's overall
+      // length) but with a solid cross-section thickness, not a thin sliver.
+      // Scaled by r/WHEEL_VISUAL_RADIUS so callers passing a non-default r
+      // still get proportionally correct bounds.
+      const scale = r / WHEEL_VISUAL_RADIUS
+      return { width: LINE_LENGTH * scale, height: LINE_RADIUS * 2 * scale, depth: WHEEL_DEPTH }
+    }
   }
 }
 
@@ -155,12 +187,24 @@ export function wheelGeometry(shape: ShapeId): THREE.BufferGeometry {
     }
 
     case 'line': {
-      // Flat bar: wide (3× diameter), thin (40% of radius), wheel depth thick
-      return new THREE.BoxGeometry(
-        WHEEL_VISUAL_RADIUS * 6,
-        WHEEL_VISUAL_RADIUS * 0.4,
-        WHEEL_DEPTH,
+      // Elongated rounded roller: real cross-section thickness (LINE_RADIUS)
+      // with hemispherical end caps, so it reads as a solid rolling shape —
+      // not a thin flailing stick — at any spin angle.
+      const geo = new THREE.CapsuleGeometry(
+        LINE_RADIUS,
+        LINE_SEGMENT_LENGTH,
+        LINE_CAP_SEGMENTS,
+        LINE_RADIAL_SEGMENTS,
       )
+      // CapsuleGeometry's local axis is Y; rotate 90° about Z so the long
+      // axis runs along X (matches the old bar's horizontal orientation).
+      geo.rotateZ(Math.PI / 2)
+      // Independently rescale the depth (z) axis to match WHEEL_DEPTH, like
+      // every other wheel shape — this only stretches the depth, it does not
+      // touch the camera-facing x/y silhouette (the rounded roller profile).
+      geo.scale(1, 1, WHEEL_DEPTH / (LINE_RADIUS * 2))
+      geo.computeVertexNormals()
+      return geo
     }
   }
 }
