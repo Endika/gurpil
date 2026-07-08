@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.6.0](https://github.com/Endika/gurpil/compare/v0.5.0...v0.6.0) (2026-07-08)
+
+
+### Features
+
+* **core:** campaign levels, difficulty tiers and per-level records ([ab25321](https://github.com/Endika/gurpil/commit/ab25321e3e7bd8ca1227d85fbb2da11ae9c3f93c))
+* **core:** jump ramps, water and bridges (completable) ([72d10f3](https://github.com/Endika/gurpil/commit/72d10f3162b0b245e8c1b00ecf88a2b7fda83233))
+* **game:** campaign level-select grid and wire levels into the loop ([979d523](https://github.com/Endika/gurpil/commit/979d523d3ecfe27d4bcb5c6b0cbf9c63ccabcae0))
+
 ## [0.5.0](https://github.com/Endika/gurpil/compare/v0.4.0...v0.5.0) (2026-07-08)
 
 
