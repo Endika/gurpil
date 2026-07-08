@@ -36,6 +36,7 @@
  */
 
 import { generateCourse, type Difficulty } from '../core/course'
+import { pickTheme, THEMES } from '../core/theme'
 import { parTimeMs, medalFor, type Medal } from '../core/medal'
 import { saveResult, type Record as BestRecord } from '../core/records'
 import { createWorld, PHYSICS_TIMESTEP } from '../physics/world'
@@ -155,7 +156,11 @@ async function runRace(
     world.step()
   }
 
-  const scene = createScene(course)
+  // Pick the visual theme (biome) from the SAME seed as the course, so a given
+  // seed always yields the same track AND the same world look (reproducible).
+  // Purely visual — no effect on physics/gameplay.
+  const themeId = pickTheme(seed)
+  const scene = createScene(course, THEMES[themeId])
 
   // ── HUD ───────────────────────────────────────────────────────────────────
   const hud = createHud(root, {
@@ -269,5 +274,5 @@ async function runRace(
 
   requestAnimationFrame(frame)
 
-  console.log(`[gurpil] race started — difficulty=${difficulty} seed=${seed}`)
+  console.log(`[gurpil] race started — difficulty=${difficulty} seed=${seed} theme=${themeId}`)
 }

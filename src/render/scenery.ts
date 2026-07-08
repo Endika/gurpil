@@ -30,6 +30,7 @@
 import * as THREE from 'three'
 import type { Course } from '../core/course'
 import type { Point } from '../core/classifyStroke'
+import type { Theme } from '../core/theme'
 
 // ─── Course extension margin ───────────────────────────────────────────────
 
@@ -84,8 +85,6 @@ const FOREST_CONE_SEGMENTS = 9
 const FOREST_BLOB_FRACTION = 0.5
 /** Extra depth spread within the band, so it doesn't read as one flat card. */
 const FOREST_Z_JITTER = 12
-/** Hazy, fog-tinted greens — deliberately muted/desaturated at this distance. */
-const FOREST_COLORS = [0x5c7d68, 0x4a6b58, 0x6f8f78, 0x7a9384]
 
 // ─── Roadside trees ──────────────────────────────────────────────────────────
 // Trunk cylinder + two foliage spheres (low + high tier), set back well
@@ -102,7 +101,6 @@ const TRUNK_RADIUS_SCALE_MIN = 0.8
 const TRUNK_RADIUS_SCALE_MAX = 1.3
 const TRUNK_HEIGHT_MIN = 1.6
 const TRUNK_HEIGHT_MAX = 2.8
-const TRUNK_COLOR = 0x6b4226
 const TRUNK_ROUGHNESS = 0.95
 
 const FOLIAGE_LOW_RADIUS_MIN = 1.0
@@ -110,7 +108,6 @@ const FOLIAGE_LOW_RADIUS_MAX = 1.7
 const FOLIAGE_HIGH_RADIUS_MIN = 0.6
 const FOLIAGE_HIGH_RADIUS_MAX = 1.1
 const FOLIAGE_ROUGHNESS = 0.9
-const FOLIAGE_COLORS = [0x3f7d3f, 0x2f6b34, 0x4a8f4a]
 
 // ─── Roadside bushes ─────────────────────────────────────────────────────────
 
@@ -123,7 +120,6 @@ const BUSH_RADIUS_MAX = 0.9
 /** Y-scale applied to the bush sphere so it reads as a squashed, rounded mound. */
 const BUSH_FLATTEN = 0.75
 const BUSH_ROUGHNESS = 0.95
-const BUSH_COLORS = [0x5a9a4c, 0x6bab5a, 0x4a8a3e]
 
 // ─── Clouds ──────────────────────────────────────────────────────────────────
 // Each "cluster" is a handful of flattened-sphere puffs offset from a shared
@@ -143,7 +139,6 @@ const CLOUD_PUFF_SPREAD_XZ = 2.4
 const CLOUD_PUFF_SPREAD_Y = 0.7
 const CLOUD_FLATTEN = 0.55
 const CLOUD_OPACITY = 0.9
-const CLOUD_COLORS = [0xffffff, 0xf3f6fa]
 
 // ─── Foreground grass / flowers ──────────────────────────────────────────────
 // Deliberately LOW and set at the road's own back edge depth — they read as
@@ -156,13 +151,11 @@ const MAX_GRASS_INSTANCES = 220
 const GRASS_HEIGHT_MIN = 0.18
 const GRASS_HEIGHT_MAX = 0.4
 const GRASS_RADIUS = 0.05
-const GRASS_COLOR = 0x6fae4a
 const GRASS_ROUGHNESS = 0.9
 /** Fraction of scattered tufts that become a tiny flower dot instead of grass. */
 const FLOWER_CHANCE = 0.18
 const FLOWER_RADIUS = 0.07
 const FLOWER_ROUGHNESS = 0.7
-const FLOWER_COLORS = [0xffd166, 0xff6b81, 0xffffff]
 
 // ─── Pure helpers (deterministic, unit-tested) ───────────────────────────────
 
@@ -283,21 +276,21 @@ export interface Scenery {
 /** Build every scenery layer for `course`. Deterministic and pure aside from
  *  Three.js object construction: the same course always yields identical
  *  scenery geometry/placement. */
-export function buildScenery(course: Course): Scenery {
+export function buildScenery(course: Course, theme: Theme): Scenery {
   const group = new THREE.Group()
 
-  const forest = buildForestBand()
+  const forest = buildForestBand(theme)
   group.add(forest.group)
 
-  group.add(buildTrees(course))
+  group.add(buildTrees(course, theme))
 
-  const bushes = buildBushes(course)
+  const bushes = buildBushes(course, theme)
   if (bushes) group.add(bushes)
 
-  const clouds = buildClouds(course)
+  const clouds = buildClouds(course, theme)
   if (clouds) group.add(clouds)
 
-  group.add(buildGrass(course))
+  group.add(buildGrass(course, theme))
 
   return {
     group,
@@ -326,7 +319,7 @@ interface ForestBand {
  * as one soft band rather than pointy firs marching to infinity. Two unlit
  * (fog-affected) InstancedMeshes — cheap, deterministic, no shadows.
  */
-function buildForestBand(): ForestBand {
+function buildForestBand(theme: Theme): ForestBand {
   const points = scatterAlongCourse(-FOREST_BAND_HALF_WIDTH, FOREST_BAND_HALF_WIDTH, FOREST_BAND_SPACING, SEED_FOREST)
 
   // Split points into cone vs blob canopies deterministically (by hash).
@@ -347,8 +340,8 @@ function buildForestBand(): ForestBand {
   const blobGeo = new THREE.SphereGeometry(1, 10, 6)
   blobGeo.translate(0, 1, 0) // base at y=0, top at y=2 (→ scale.y = height/2, below)
 
-  const coneMesh = fillForestMesh(coneGeo, points, coneIndices, false)
-  const blobMesh = fillForestMesh(blobGeo, points, blobIndices, true)
+  const coneMesh = fillForestMesh(coneGeo, points, coneIndices, false, theme)
+  const blobMesh = fillForestMesh(blobGeo, points, blobIndices, true, theme)
 
   const group = new THREE.Group()
   group.add(coneMesh, blobMesh)
@@ -368,6 +361,7 @@ function fillForestMesh(
   points: ScatterPoint[],
   indices: number[],
   isBlob: boolean,
+  theme: Theme,
 ): THREE.InstancedMesh {
   const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: true })
   const mesh = new THREE.InstancedMesh(geo, mat, Math.max(1, indices.length))
@@ -386,7 +380,7 @@ function fillForestMesh(
     const scaleY = isBlob ? height / 2 : height
 
     mesh.setMatrixAt(j, matrixAt(p.x, 0, zJitter, radius, scaleY, radius))
-    mesh.setColorAt(j, new THREE.Color(pickFromHash(colorHash, FOREST_COLORS)))
+    mesh.setColorAt(j, new THREE.Color(pickFromHash(colorHash, theme.forest)))
   }
 
   mesh.instanceMatrix.needsUpdate = true
@@ -402,7 +396,7 @@ function fillForestMesh(
  * foliage. Set back at TREE_Z_NEAR..TREE_Z_FAR — always behind
  * ROAD_BACK_EDGE_Z, never in front of the road.
  */
-function buildTrees(course: Course): THREE.Group {
+function buildTrees(course: Course, theme: Theme): THREE.Group {
   const group = new THREE.Group()
   const rangeLen = course.finishX - course.startX + 2 * COURSE_MARGIN
   const spacing = spacingForBudget(rangeLen, TREE_BASE_SPACING, MAX_TREE_INSTANCES)
@@ -413,7 +407,7 @@ function buildTrees(course: Course): THREE.Group {
   const trunkGeo = new THREE.CylinderGeometry(TRUNK_RADIUS * 0.7, TRUNK_RADIUS, 1, 6)
   trunkGeo.translate(0, 0.5, 0) // base at local y=0, top at y=1 → scale.y = world height
   const trunkMat = new THREE.MeshStandardMaterial({
-    color: TRUNK_COLOR,
+    color: theme.trunk,
     roughness: TRUNK_ROUGHNESS,
     metalness: 0,
   })
@@ -445,12 +439,12 @@ function buildTrees(course: Course): THREE.Group {
     const foliageLowRadius = lerpRange(foliageLowHash, FOLIAGE_LOW_RADIUS_MIN, FOLIAGE_LOW_RADIUS_MAX)
     const foliageLowY = groundY + trunkHeight + foliageLowRadius * 0.4
     foliageLowMesh.setMatrixAt(i, matrixAt(x, foliageLowY, z, foliageLowRadius, foliageLowRadius, foliageLowRadius))
-    foliageLowMesh.setColorAt(i, new THREE.Color(pickFromHash(colorHashLow, FOLIAGE_COLORS)))
+    foliageLowMesh.setColorAt(i, new THREE.Color(pickFromHash(colorHashLow, theme.foliage)))
 
     const foliageHighRadius = lerpRange(foliageHighHash, FOLIAGE_HIGH_RADIUS_MIN, FOLIAGE_HIGH_RADIUS_MAX)
     const foliageHighY = foliageLowY + foliageLowRadius * 0.7 + foliageHighRadius * 0.6
     foliageHighMesh.setMatrixAt(i, matrixAt(x, foliageHighY, z, foliageHighRadius, foliageHighRadius, foliageHighRadius))
-    foliageHighMesh.setColorAt(i, new THREE.Color(pickFromHash(colorHashHigh, FOLIAGE_COLORS)))
+    foliageHighMesh.setColorAt(i, new THREE.Color(pickFromHash(colorHashHigh, theme.foliage)))
   }
 
   trunkMesh.instanceMatrix.needsUpdate = true
@@ -475,7 +469,7 @@ function buildTrees(course: Course): THREE.Group {
  * the road than the trees (still safely behind ROAD_BACK_EDGE_Z) so they
  * read as low undergrowth in front of the tree line.
  */
-function buildBushes(course: Course): THREE.InstancedMesh | null {
+function buildBushes(course: Course, theme: Theme): THREE.InstancedMesh | null {
   const rangeLen = course.finishX - course.startX + 2 * COURSE_MARGIN
   const spacing = spacingForBudget(rangeLen, BUSH_BASE_SPACING, MAX_BUSH_INSTANCES)
   const points = scatterAlongCourse(course.startX - COURSE_MARGIN, course.finishX + COURSE_MARGIN, spacing, SEED_BUSHES)
@@ -498,7 +492,7 @@ function buildBushes(course: Course): THREE.InstancedMesh | null {
     const y = groundY + radius * BUSH_FLATTEN * 0.6
 
     mesh.setMatrixAt(i, matrixAt(p.x, y, z, radius, radius * BUSH_FLATTEN, radius))
-    mesh.setColorAt(i, new THREE.Color(pickFromHash(colorHash, BUSH_COLORS)))
+    mesh.setColorAt(i, new THREE.Color(pickFromHash(colorHash, theme.bush)))
   }
 
   mesh.instanceMatrix.needsUpdate = true
@@ -514,7 +508,7 @@ function buildBushes(course: Course): THREE.InstancedMesh | null {
  * Height is anchored to the terrain profile below (+ a generous offset) so
  * clouds always sit well above the tallest hazard regardless of course shape.
  */
-function buildClouds(course: Course): THREE.InstancedMesh | null {
+function buildClouds(course: Course, theme: Theme): THREE.InstancedMesh | null {
   const rangeLen = course.finishX - course.startX + 2 * COURSE_MARGIN
   const spacing = spacingForBudget(rangeLen, CLOUD_BASE_SPACING, MAX_CLOUD_CLUSTERS)
   const clusters = scatterAlongCourse(course.startX - COURSE_MARGIN, course.finishX + COURSE_MARGIN, spacing, SEED_CLOUDS)
@@ -553,7 +547,7 @@ function buildClouds(course: Course): THREE.InstancedMesh | null {
         idx,
         matrixAt(cluster.x + offsetX, clusterY + offsetY, z, radius, radius * CLOUD_FLATTEN, radius),
       )
-      mesh.setColorAt(idx, new THREE.Color(pickFromHash(colorHash, CLOUD_COLORS)))
+      mesh.setColorAt(idx, new THREE.Color(pickFromHash(colorHash, theme.cloud)))
       idx++
     }
   }
@@ -571,7 +565,7 @@ function buildClouds(course: Course): THREE.InstancedMesh | null {
  * fringe where the road meets the roadside vegetation. Kept short (see
  * GRASS_HEIGHT_*) so it never rises into the vehicle/wheel sightline.
  */
-function buildGrass(course: Course): THREE.Group {
+function buildGrass(course: Course, theme: Theme): THREE.Group {
   const group = new THREE.Group()
   const rangeLen = course.finishX - course.startX + 2 * COURSE_MARGIN
   const spacing = spacingForBudget(rangeLen, GRASS_BASE_SPACING, MAX_GRASS_INSTANCES)
@@ -588,7 +582,7 @@ function buildGrass(course: Course): THREE.Group {
   if (grassPoints.length > 0) {
     const geo = new THREE.ConeGeometry(GRASS_RADIUS, 1, 5)
     geo.translate(0, 0.5, 0) // base at local y=0, tip at y=1 → scale.y = world height
-    const mat = new THREE.MeshStandardMaterial({ color: GRASS_COLOR, roughness: GRASS_ROUGHNESS, metalness: 0 })
+    const mat = new THREE.MeshStandardMaterial({ color: theme.grass, roughness: GRASS_ROUGHNESS, metalness: 0 })
     const mesh = new THREE.InstancedMesh(geo, mat, grassPoints.length)
     for (let i = 0; i < grassPoints.length; i++) {
       const p = grassPoints[i]
@@ -612,7 +606,7 @@ function buildGrass(course: Course): THREE.Group {
       const colorHash = sceneryHash(SEED_GRASS + i * 7.1 + 3.3)
       const groundY = sampleGroundY(course.ground, p.x)
       mesh.setMatrixAt(i, matrixAt(p.x, groundY + FLOWER_RADIUS * 0.8, GRASS_Z, 1, 1, 1))
-      mesh.setColorAt(i, new THREE.Color(pickFromHash(colorHash, FLOWER_COLORS)))
+      mesh.setColorAt(i, new THREE.Color(pickFromHash(colorHash, theme.flower)))
     }
     mesh.instanceMatrix.needsUpdate = true
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true

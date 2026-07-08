@@ -16,16 +16,21 @@ import {
   APRON_RUN,
   APRON_DROP,
 } from '../../src/render/terrain'
+import { THEMES } from '../../src/core/theme'
+
+// The grassland theme reproduces the pre-theme hardcoded palette, so these
+// zone-color assertions carry over unchanged.
+const theme = THEMES.grassland
 
 describe('terrainColorAt', () => {
   it('returns distinct colors for each zone', () => {
-    const flat = terrainColorAt(10)
-    const rocky = terrainColorAt(35)
-    const uphill = terrainColorAt(70)
-    const mud = terrainColorAt(110)
-    const ice = terrainColorAt(150)
-    const eggs = terrainColorAt(195)
-    const runOut = terrainColorAt(220)
+    const flat = terrainColorAt(10, theme)
+    const rocky = terrainColorAt(35, theme)
+    const uphill = terrainColorAt(70, theme)
+    const mud = terrainColorAt(110, theme)
+    const ice = terrainColorAt(150, theme)
+    const eggs = terrainColorAt(195, theme)
+    const runOut = terrainColorAt(220, theme)
 
     // All should be non-zero hex colors
     for (const c of [flat, rocky, uphill, mud, ice, eggs, runOut]) {
@@ -39,7 +44,7 @@ describe('terrainColorAt', () => {
 
   it('flat zone (x < 20) is green-ish', () => {
     // 0x5cb85c has G channel dominant
-    const c = terrainColorAt(0)
+    const c = terrainColorAt(0, theme)
     const g = (c >> 8) & 0xff
     const r = (c >> 16) & 0xff
     expect(g).toBeGreaterThan(r)
@@ -47,7 +52,7 @@ describe('terrainColorAt', () => {
 
   it('ice zone (120 < x < 170) is blue-ish', () => {
     // 0x87ceeb: B > R
-    const c = terrainColorAt(140)
+    const c = terrainColorAt(140, theme)
     const b = c & 0xff
     const r = (c >> 16) & 0xff
     expect(b).toBeGreaterThan(r)
@@ -56,11 +61,11 @@ describe('terrainColorAt', () => {
 
 describe('buildTerrainStrip', () => {
   it('returns empty arrays for fewer than 2 points', () => {
-    const result = buildTerrainStrip([])
+    const result = buildTerrainStrip([], theme)
     expect(result.positions.length).toBe(0)
     expect(result.indices.length).toBe(0)
 
-    const single = buildTerrainStrip([{ x: 0, y: 0 }])
+    const single = buildTerrainStrip([{ x: 0, y: 0 }], theme)
     expect(single.positions.length).toBe(0)
   })
 
@@ -70,7 +75,7 @@ describe('buildTerrainStrip', () => {
       { x: 1, y: 0 },
       { x: 2, y: 1 },
     ]
-    const { positions, colors } = buildTerrainStrip(pts)
+    const { positions, colors } = buildTerrainStrip(pts, theme)
     // 5 verts per point (top-front/back, bot-front/back, apron-near) × 3 floats
     expect(positions.length).toBe(pts.length * 5 * 3)
     expect(colors.length).toBe(pts.length * 5 * 3)
@@ -83,7 +88,7 @@ describe('buildTerrainStrip', () => {
       { x: 2, y: 1 },
       { x: 3, y: 2 },
     ]
-    const { indices } = buildTerrainStrip(pts)
+    const { indices } = buildTerrainStrip(pts, theme)
     // (n-1) segments × 18 indices each (3 quads: top + wall + apron, 6 each)
     expect(indices.length).toBe((pts.length - 1) * 18)
   })
@@ -93,7 +98,7 @@ describe('buildTerrainStrip', () => {
       { x: 5, y: 3 },
       { x: 10, y: 7 },
     ]
-    const { positions } = buildTerrainStrip(pts)
+    const { positions } = buildTerrainStrip(pts, theme)
     // Vertex 0 = top-front of first point: (x=5, y=3, z=zFront)
     expect(positions[0]).toBe(5)
     expect(positions[1]).toBe(3)
@@ -106,7 +111,7 @@ describe('buildTerrainStrip', () => {
       { x: 5, y: 3 },
       { x: 10, y: 7 },
     ]
-    const { positions } = buildTerrainStrip(pts)
+    const { positions } = buildTerrainStrip(pts, theme)
     // Vertex 4 of the first point = apron-near: same x, dropped in y, pushed +z.
     const base = 4 * 3
     expect(positions[base + 0]).toBe(5) // same x as the front edge
@@ -124,8 +129,8 @@ describe('buildTerrainStrip', () => {
       { x: 110, y: 0 },
       { x: 111, y: 0 },
     ]
-    const { colors } = buildTerrainStrip(pts)
-    const zoneColor = new THREE.Color(terrainColorAt(110))
+    const { colors } = buildTerrainStrip(pts, theme)
+    const zoneColor = new THREE.Color(terrainColorAt(110, theme))
 
     // vIdx 5*0+0 = top-front, vIdx 5*0+1 = top-back (see the vertex layout
     // comment above buildTerrainStrip).
@@ -156,8 +161,8 @@ describe('buildTerrainStrip', () => {
       { x: 110, y: 0 },
       { x: 111, y: 0 },
     ]
-    const { colors } = buildTerrainStrip(pts)
-    const zoneColor = new THREE.Color(terrainColorAt(110))
+    const { colors } = buildTerrainStrip(pts, theme)
+    const zoneColor = new THREE.Color(terrainColorAt(110, theme))
     const apronR = colors[4 * 3]
     // Darkened but proportional to the true front zone color, not the
     // backdrop-blended back-edge color.
@@ -167,7 +172,7 @@ describe('buildTerrainStrip', () => {
 
   it('all index values are within vertex range', () => {
     const pts = Array.from({ length: 10 }, (_, i) => ({ x: i, y: 0 }))
-    const { positions, indices } = buildTerrainStrip(pts)
+    const { positions, indices } = buildTerrainStrip(pts, theme)
     const maxVert = positions.length / 3 - 1
     for (const idx of indices) {
       expect(idx).toBeGreaterThanOrEqual(0)

@@ -32,6 +32,7 @@
 
 import * as THREE from 'three'
 import type { Course } from '../core/course'
+import type { Theme } from '../core/theme'
 import type { Vehicle } from '../physics/vehicle'
 import { SHAPES } from '../core/shapes'
 import type { ShapeId } from '../core/shapes'
@@ -439,18 +440,12 @@ const JUICE_FLASH_DURATION = 0.18
 /** Color used for the flash peak (pure white). */
 const JUICE_FLASH_COLOR = 0xffffff
 
-// ─── Sky / lighting colors ────────────────────────────────────────────────────
+// ─── Sky / lighting ─────────────────────────────────────────────────────────
+// All environment COLORS (sky gradient, fog, sun/hemisphere tints + intensities)
+// now come from the active Theme (see core/theme.ts — the single source of truth
+// for env color). Only NON-color tuning (gradient resolution, fog distances)
+// stays here.
 
-const SKY_COLOR = 0x87ceeb // cornflower blue — renderer clear-color fallback
-const SUN_COLOR = 0xfff7e0 // warm sunlight
-const SUN_INTENSITY = 1.3
-const HEMI_INTENSITY = 0.85
-const AMBIENT_SKY = 0x87cefa // sky ambient
-const AMBIENT_GROUND = 0x8b6914 // ground ambient
-
-/** Vertical gradient sky: deeper blue up top fading to a pale horizon band. */
-const SKY_TOP_COLOR = '#5ba8e6'
-const SKY_HORIZON_COLOR = '#d6ecf7'
 /** Resolution of the 1×N gradient texture painted onto scene.background. */
 const SKY_GRADIENT_HEIGHT = 256
 
@@ -458,11 +453,16 @@ const SKY_GRADIENT_HEIGHT = 256
 // Linear fog tinted to the sky's horizon so distance fades seamlessly into the
 // sky. FOG_NEAR is set beyond the largest camera-to-vehicle distance (portrait
 // pushes the camera to ≈87 units back) so the car and nearby track are NEVER
-// fogged; only the far parallax hills fade.
+// fogged; only the far parallax hills fade. The fog COLOR is themed (theme.fog).
 
-const FOG_COLOR = 0xd6ecf7 // matches SKY_HORIZON_COLOR
 const FOG_NEAR = 105
 const FOG_FAR = 320
+
+/** Convert a hex color number (0xRRGGBB) to a `#rrggbb` CSS string for the 2D
+ *  canvas gradient. */
+function hexToCss(hex: number): string {
+  return '#' + (hex & 0xffffff).toString(16).padStart(6, '0')
+}
 
 // ─── Directional-light shadows ──────────────────────────────────────────────────
 // The sun casts soft shadows. Both the light and its target follow the vehicle
@@ -510,8 +510,6 @@ const HILL_SKIRT_DEPTH = 80
 interface HillLayerSpec {
   /** z depth (world) — more negative = further back. */
   z: number
-  /** Flat silhouette color (lighter/bluer with distance). */
-  color: number
   /** Peak bump height of the wavy top edge (metres). */
   amplitude: number
   /** Baseline y offset added on top of the parallax-followed camera y. */
@@ -524,11 +522,15 @@ interface HillLayerSpec {
   phase: number
 }
 
-/** Three layers, near → far. Colors trend toward the horizon/fog color. */
+/**
+ * Three layers, near → far. Only shape/parallax tuning lives here; each layer's
+ * COLOR comes from the active theme (theme.hills[0..2], near→far) at build time —
+ * lighter/bluer (or theme-appropriate) with distance so they fade into the fog.
+ */
 const HILL_LAYERS: HillLayerSpec[] = [
-  { z: -50, color: 0x7fb4d8, amplitude: 6, baseY: -4, parallax: 0.72, frequency: 0.05, phase: 0 },
-  { z: -80, color: 0xa6cce0, amplitude: 8, baseY: 1, parallax: 0.82, frequency: 0.035, phase: 1.7 },
-  { z: -110, color: 0xc4dcec, amplitude: 11, baseY: 6, parallax: 0.91, frequency: 0.025, phase: 3.1 },
+  { z: -50, amplitude: 6, baseY: -4, parallax: 0.72, frequency: 0.05, phase: 0 },
+  { z: -80, amplitude: 8, baseY: 1, parallax: 0.82, frequency: 0.035, phase: 1.7 },
+  { z: -110, amplitude: 11, baseY: 6, parallax: 0.91, frequency: 0.025, phase: 3.1 },
 ]
 
 // ─── Public types ─────────────────────────────────────────────────────────────
@@ -574,12 +576,12 @@ interface JuiceState {
  * The renderer is appended to document.body. The scene is ready immediately;
  * call `sync(vehicle)` each frame before `render()`.
  */
-export function createScene(course: Course): Scene3D {
+export function createScene(course: Course, theme: Theme): Scene3D {
   // ── Renderer ────────────────────────────────────────────────────────────────
   const renderer = new THREE.WebGLRenderer({ antialias: true })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO))
   renderer.setSize(window.innerWidth, window.innerHeight)
-  renderer.setClearColor(SKY_COLOR)
+  renderer.setClearColor(theme.clearColor)
   // Soft shadows — the biggest 3D-pop lever. PCF-soft keeps edges gentle at a
   // modest map size (mobile-friendly).
   renderer.shadowMap.enabled = true
@@ -599,18 +601,18 @@ export function createScene(course: Course): Scene3D {
   const scene = new THREE.Scene()
   // Vertical gradient sky (deep blue → pale horizon) instead of a flat color,
   // plus horizon-tinted fog so distance reads with depth.
-  scene.background = buildSkyGradientTexture()
-  scene.fog = new THREE.Fog(FOG_COLOR, FOG_NEAR, FOG_FAR)
+  scene.background = buildSkyGradientTexture(theme)
+  scene.fog = new THREE.Fog(theme.fog, FOG_NEAR, FOG_FAR)
 
   // Hemisphere light (sky from above, ground bounce from below)
-  const hemi = new THREE.HemisphereLight(AMBIENT_SKY, AMBIENT_GROUND, HEMI_INTENSITY)
+  const hemi = new THREE.HemisphereLight(theme.hemiSky, theme.hemiGround, theme.hemiIntensity)
   hemi.position.set(0, 1, 0)
   scene.add(hemi)
 
   // Directional sun light — casts the soft shadows. Both the light and its
   // target follow the vehicle each frame (see sync) so the shadow map stays
   // centred on the car.
-  const sun = new THREE.DirectionalLight(SUN_COLOR, SUN_INTENSITY)
+  const sun = new THREE.DirectionalLight(theme.sunColor, theme.sunIntensity)
   sun.position.set(SUN_OFFSET_X, SUN_OFFSET_Y, SUN_OFFSET_Z)
   sun.castShadow = true
   sun.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE)
@@ -628,14 +630,14 @@ export function createScene(course: Course): Scene3D {
   scene.add(sun.target)
 
   // ── Parallax background hills ──────────────────────────────────────────────────
-  const hills = buildHillLayers()
+  const hills = buildHillLayers(theme)
   for (const hill of hills) scene.add(hill.mesh)
 
   // ── Landscape scenery (trees, bushes, distant forest, clouds, grass) ────────────
   // Pure decoration — no physics/collision, never occludes the road/vehicle
   // (see scenery.ts header for the z-depth safety argument). Only its
   // distant forest band needs a per-frame parallax update (see sync below).
-  const scenery = buildScenery(course)
+  const scenery = buildScenery(course, theme)
   scene.add(scenery.group)
 
   // ── Camera ──────────────────────────────────────────────────────────────────
@@ -654,16 +656,16 @@ export function createScene(course: Course): Scene3D {
   // road never reads as a strip floating over a void and the roadside scenery
   // sits on real ground. Fully behind (z ≤ road back edge) and below the play
   // plane, so it never occludes the vehicle/track (see terrain.ts).
-  const groundBackdrop = buildGroundBackdrop(course)
+  const groundBackdrop = buildGroundBackdrop(course, theme)
   scene.add(groundBackdrop)
 
   // ── Terrain ──────────────────────────────────────────────────────────────────
-  const terrainMesh = buildTerrainMesh(course)
+  const terrainMesh = buildTerrainMesh(course, theme)
   terrainMesh.position.z = TERRAIN_Z
   terrainMesh.receiveShadow = true
   scene.add(terrainMesh)
 
-  const obstacleMeshes = buildObstacleMeshes(course.obstacles)
+  const obstacleMeshes = buildObstacleMeshes(course.obstacles, theme)
   scene.add(obstacleMeshes)
 
   // ── Vehicle meshes ───────────────────────────────────────────────────────────
@@ -1085,14 +1087,14 @@ interface HillLayer {
  * fading to a pale horizon band), painted onto scene.background. Cheap: one
  * small texture, generated once.
  */
-function buildSkyGradientTexture(): THREE.CanvasTexture {
+function buildSkyGradientTexture(theme: Theme): THREE.CanvasTexture {
   const canvas = document.createElement('canvas')
   canvas.width = 1
   canvas.height = SKY_GRADIENT_HEIGHT
   const ctx = canvas.getContext('2d')!
   const grad = ctx.createLinearGradient(0, 0, 0, SKY_GRADIENT_HEIGHT)
-  grad.addColorStop(0, SKY_TOP_COLOR)
-  grad.addColorStop(1, SKY_HORIZON_COLOR)
+  grad.addColorStop(0, hexToCss(theme.skyTop))
+  grad.addColorStop(1, hexToCss(theme.skyHorizon))
   ctx.fillStyle = grad
   ctx.fillRect(0, 0, 1, SKY_GRADIENT_HEIGHT)
   const texture = new THREE.CanvasTexture(canvas)
@@ -1106,9 +1108,10 @@ function buildSkyGradientTexture(): THREE.CanvasTexture {
  * affected) they fade into the fog with distance. Built once; only their x/y
  * are updated each frame (see sync) for the parallax scroll.
  */
-function buildHillLayers(): HillLayer[] {
+function buildHillLayers(theme: Theme): HillLayer[] {
   const layers: HillLayer[] = []
-  for (const spec of HILL_LAYERS) {
+  for (let li = 0; li < HILL_LAYERS.length; li++) {
+    const spec = HILL_LAYERS[li]
     const shape = new THREE.Shape()
     const topAt = (x: number): number =>
       spec.amplitude *
@@ -1124,7 +1127,10 @@ function buildHillLayers(): HillLayer[] {
     shape.closePath()
 
     const geo = new THREE.ShapeGeometry(shape)
-    const mat = new THREE.MeshBasicMaterial({ color: spec.color, fog: true })
+    // Color per layer from the theme (near→far = theme.hills[0..n]); clamp the
+    // index so extra layers reuse the farthest hue.
+    const hillColor = theme.hills[Math.min(li, theme.hills.length - 1)]
+    const mat = new THREE.MeshBasicMaterial({ color: hillColor, fog: true })
     const mesh = new THREE.Mesh(geo, mat)
     mesh.position.z = spec.z
     layers.push({ mesh, parallax: spec.parallax, baseY: spec.baseY })

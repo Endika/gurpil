@@ -15,6 +15,7 @@
 import * as THREE from 'three'
 import type { Course, Obstacle } from '../core/course'
 import type { Point } from '../core/classifyStroke'
+import type { Theme } from '../core/theme'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -47,8 +48,6 @@ const TERRAIN_METALNESS = 0
 const LOG_RADIUS = EGG_VISUAL_RADIUS
 const LOG_LENGTH = TERRAIN_DEPTH
 const LOG_RADIAL_SEGMENTS = 10
-const LOG_BARK_COLOR = 0x6b4226
-const LOG_END_CAP_COLOR = 0x4a2e1a
 const LOG_ROUGHNESS = 0.95
 const LOG_METALNESS = 0
 
@@ -58,7 +57,6 @@ const LOG_METALNESS = 0
 const ROCK_RADIUS = EGG_VISUAL_RADIUS
 const ROCK_DETAIL = 1
 const ROCK_JITTER_AMOUNT = 0.12
-const ROCK_COLOR = 0x8d8d8d
 const ROCK_ROUGHNESS = 1
 const ROCK_METALNESS = 0
 
@@ -139,8 +137,6 @@ const GROUND_BACKDROP_BACK_Z = -170
  *  frustum's width at the far ground depth for any aspect, so the course
  *  start/finish never reveal a bare edge. */
 const GROUND_BACKDROP_X_MARGIN = 260
-/** Muted terrain green — reads as continuous land, fades to fog with distance. */
-const GROUND_BACKDROP_COLOR = 0x6ba368
 const GROUND_BACKDROP_ROUGHNESS = 1
 
 /**
@@ -161,17 +157,19 @@ const BACK_EDGE_BACKDROP_BLEND = 0.65
 // ─── Terrain color zones ──────────────────────────────────────────────────────
 
 /**
- * Color the terrain strip by x position to match the course zones.
- * Returns a hex color number.
+ * Color the terrain strip by x position to match the course zones, reading the
+ * per-zone palette from the active `theme` (the single source of truth for
+ * environment color — see core/theme.ts). Returns a hex color number.
  */
-export function terrainColorAt(x: number): number {
-  if (x < 20) return 0x5cb85c // flat: green
-  if (x < 50) return 0x8b7355 // rocky: brown
-  if (x < 90) return 0xe67e22 // uphill: orange
-  if (x < 130) return 0x795548 // mud: dark brown
-  if (x < 170) return 0x87ceeb // ice: light blue
-  if (x < 210) return 0xf39c12 // eggs zone: amber
-  return 0x4caf50 // run-out: bright green
+export function terrainColorAt(x: number, theme: Theme): number {
+  const t = theme.terrain
+  if (x < 20) return t.flat // flat
+  if (x < 50) return t.rocky // rocky
+  if (x < 90) return t.uphill // uphill
+  if (x < 130) return t.mud // mud
+  if (x < 170) return t.ice // ice
+  if (x < 210) return t.eggs // eggs zone
+  return t.runOut // run-out
 }
 
 // ─── Pure geometry helpers ────────────────────────────────────────────────────
@@ -187,7 +185,7 @@ export function terrainColorAt(x: number): number {
  *
  * This function is pure (no Three.js constructors) and is exported for testing.
  */
-export function buildTerrainStrip(ground: Point[]): {
+export function buildTerrainStrip(ground: Point[], theme: Theme): {
   positions: Float32Array
   colors: Float32Array
   indices: Uint32Array
@@ -206,7 +204,7 @@ export function buildTerrainStrip(ground: Point[]): {
   const wallBottom = -TERRAIN_WALL_DEPTH
   const zApron = zFront + APRON_RUN
   // Built once (not per-point) — see BACK_EDGE_BACKDROP_BLEND doc comment.
-  const backdropColor = new THREE.Color(GROUND_BACKDROP_COLOR)
+  const backdropColor = new THREE.Color(theme.groundBackdrop)
 
   // Per point i we emit 5 vertices:
   //   - top edge:  front (zFront) + back (zBack), at y = ground y
@@ -254,7 +252,7 @@ export function buildTerrainStrip(ground: Point[]): {
     positions[pi + 13] = y - APRON_DROP
     positions[pi + 14] = zApron
 
-    const col = new THREE.Color(terrainColorAt(x))
+    const col = new THREE.Color(terrainColorAt(x, theme))
     // Back-edge verts (top-back, bot-back) blend toward the ground backdrop's
     // color so the top face fades into it across the strip's depth instead of
     // meeting it in a hard, single-color line at TERRAIN_BACK_Z (see
@@ -337,19 +335,19 @@ function hash01(n: number): number {
 
 /** Build a fallen-log mesh: a cylinder lying across the track (axis along z),
  *  with a darker end-cap so the cut faces read distinct from the bark. */
-function buildLogMesh(): THREE.Mesh {
+function buildLogMesh(theme: Theme): THREE.Mesh {
   const geo = new THREE.CylinderGeometry(LOG_RADIUS, LOG_RADIUS, LOG_LENGTH, LOG_RADIAL_SEGMENTS)
   // CylinderGeometry's local axis is Y; rotate 90° about X so the axis runs
   // along Z (across the track depth) once placed in the scene.
   geo.rotateX(Math.PI / 2)
 
   const barkMat = new THREE.MeshStandardMaterial({
-    color: LOG_BARK_COLOR,
+    color: theme.logBark,
     roughness: LOG_ROUGHNESS,
     metalness: LOG_METALNESS,
   })
   const endCapMat = new THREE.MeshStandardMaterial({
-    color: LOG_END_CAP_COLOR,
+    color: theme.logEndCap,
     roughness: LOG_ROUGHNESS,
     metalness: LOG_METALNESS,
   })
@@ -363,7 +361,7 @@ function buildLogMesh(): THREE.Mesh {
  * distinct, irregular stone rather than a perfect geometric solid — while
  * staying stable across rebuilds (no Math.random).
  */
-function buildRockMesh(seedX: number): THREE.Mesh {
+function buildRockMesh(seedX: number, theme: Theme): THREE.Mesh {
   const geo = new THREE.IcosahedronGeometry(ROCK_RADIUS, ROCK_DETAIL)
   const pos = geo.getAttribute('position')
   const v = new THREE.Vector3()
@@ -377,7 +375,7 @@ function buildRockMesh(seedX: number): THREE.Mesh {
   geo.computeVertexNormals()
 
   const mat = new THREE.MeshStandardMaterial({
-    color: ROCK_COLOR,
+    color: theme.rock,
     roughness: ROCK_ROUGHNESS,
     metalness: ROCK_METALNESS,
     flatShading: true,
@@ -391,8 +389,8 @@ function buildRockMesh(seedX: number): THREE.Mesh {
  * Build the terrain mesh from course.ground.
  * Returns a THREE.Mesh using vertex colors for zone tinting.
  */
-export function buildTerrainMesh(course: Course): THREE.Mesh {
-  const { positions, colors, indices } = buildTerrainStrip(course.ground)
+export function buildTerrainMesh(course: Course, theme: Theme): THREE.Mesh {
+  const { positions, colors, indices } = buildTerrainStrip(course.ground, theme)
 
   const geo = new THREE.BufferGeometry()
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
@@ -438,14 +436,14 @@ export function groundBackdropExtent(
  * (front edge at the road's back edge, well below the road surface); the caller
  * just adds it to the scene.
  */
-export function buildGroundBackdrop(course: Course): THREE.Mesh {
+export function buildGroundBackdrop(course: Course, theme: Theme): THREE.Mesh {
   const { width, centerX, depth, centerZ } = groundBackdropExtent(course.startX, course.finishX)
 
   const geo = new THREE.PlaneGeometry(width, depth)
   geo.rotateX(-Math.PI / 2) // lie flat in the xz-plane, normal facing +y
 
   const mat = new THREE.MeshStandardMaterial({
-    color: GROUND_BACKDROP_COLOR,
+    color: theme.groundBackdrop,
     roughness: GROUND_BACKDROP_ROUGHNESS,
     metalness: 0,
   })
@@ -467,12 +465,12 @@ export function buildGroundBackdrop(course: Course): THREE.Mesh {
  *
  * Returns one Group containing all obstacle meshes.
  */
-export function buildObstacleMeshes(obstacles: Obstacle[]): THREE.Group {
+export function buildObstacleMeshes(obstacles: Obstacle[], theme: Theme): THREE.Group {
   const group = new THREE.Group()
 
   for (const obs of obstacles) {
     if (obs.kind !== 'egg') continue
-    const mesh = obs.variant === 'log' ? buildLogMesh() : buildRockMesh(obs.x)
+    const mesh = obs.variant === 'log' ? buildLogMesh(theme) : buildRockMesh(obs.x, theme)
     mesh.position.set(obs.x, obs.y + EGG_VISUAL_RADIUS, EGG_Z)
     mesh.castShadow = true
     mesh.receiveShadow = true
