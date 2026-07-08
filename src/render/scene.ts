@@ -55,10 +55,10 @@ const CAM_FOV_Y = 34
  * portrait (narrow) the required camera distance is grown so this much width
  * is still visible; in landscape the height minimum dominates.
  */
-const MIN_VISIBLE_HALF_WIDTH = 10
+const MIN_VISIBLE_HALF_WIDTH = 7
 
 /** Minimum HALF-height the camera always shows around the car (game metres). */
-const MIN_VISIBLE_HALF_HEIGHT = 8
+const MIN_VISIBLE_HALF_HEIGHT = 6
 
 /**
  * View-offset direction from the look target to the camera — a GENTLE 3/4:
