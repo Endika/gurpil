@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.0](https://github.com/Endika/gurpil/compare/v0.4.0...v0.5.0) (2026-07-08)
+
+
+### Features
+
+* **render:** visual themes (grassland/desert/snow/night/lava) ([2acb941](https://github.com/Endika/gurpil/commit/2acb94159861345496e3d0c945e7cef6204529b6))
+
+
+### Bug Fixes
+
+* **render:** rider faces forward (profile) instead of the camera ([eb6cbc4](https://github.com/Endika/gurpil/commit/eb6cbc4c421a61a06c9dc32d84bac47e6663842b))
+
 ## [0.4.0](https://github.com/Endika/gurpil/compare/v0.3.0...v0.4.0) (2026-07-08)
 
 
