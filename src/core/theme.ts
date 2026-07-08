@@ -42,6 +42,13 @@ export interface TerrainColors {
   water: number
   /** Wooden bridge deck. */
   bridge: number
+  // ── Stage-4 terrain geometry accents (real geometry over the flat zones) ──
+  /** Lighter tint for the water surface's second, subtly-offset ripple layer. */
+  waterHighlight: number
+  /** Bridge railing (posts + rail bar) — distinct from the deck plank color. */
+  bridgeRail: number
+  /** Ramp kicker lip / support-strut accent color. */
+  rampAccent: number
 }
 
 /**
@@ -140,6 +147,9 @@ const GRASSLAND: Theme = {
     ramp: 0xc0632a, // warm launch-ramp clay
     water: 0x3a8ec4, // river blue
     bridge: 0x8a5a32, // wooden planks
+    waterHighlight: 0x9fe0f2, // pale foam-blue ripple highlight
+    bridgeRail: 0x5a3a1e, // darker timber rail/post
+    rampAccent: 0xffb347, // hazard-orange kicker lip
   },
   hills: [0x7fb4d8, 0xa6cce0, 0xc4dcec],
   forest: [0x5c7d68, 0x4a6b58, 0x6f8f78, 0x7a9384],
@@ -177,6 +187,9 @@ const DESERT: Theme = {
     ramp: 0xc98a4a, // packed-sand kicker
     water: 0x4aa9c4, // desert oasis / waterhole
     bridge: 0x9c6b3c, // sun-bleached timber
+    waterHighlight: 0xa8e6f0, // pale turquoise oasis foam
+    bridgeRail: 0x6b4322, // weathered dark-wood rail/post
+    rampAccent: 0xffd27a, // sun-bleached tan-yellow kicker lip
   },
   hills: [0xcaa46a, 0xdcbe8c, 0xecd6b0],
   forest: [0x9a8552, 0x87754a, 0xa89a66, 0xb0a074], // dry scrub / cacti-green tinge
@@ -214,6 +227,9 @@ const SNOW: Theme = {
     ramp: 0xdfeaf2, // packed-snow kicker
     water: 0x6fb8d6, // meltwater / open water
     bridge: 0x7a6047, // dark timber against the snow
+    waterHighlight: 0xd8f2fa, // icy white-blue foam ripple
+    bridgeRail: 0x4a3a28, // darker timber rail/post
+    rampAccent: 0xff6b5a, // warm marker-flag red kicker lip
   },
   hills: [0xb8cfe0, 0xcfe0ec, 0xe3eef6],
   forest: [0x5a6f72, 0x4c6062, 0x6d8083, 0x7c8d8f], // frosted evergreens
@@ -251,6 +267,9 @@ const NIGHT: Theme = {
     ramp: 0x4a3f30, // dim earthen kicker
     water: 0x2a4a68, // moonlit water
     bridge: 0x3a2e22, // dark timber
+    waterHighlight: 0x6a90b8, // moonlit foam highlight
+    bridgeRail: 0x241a12, // near-black rail/post
+    rampAccent: 0xbcd0ff, // moonlight-glow kicker lip
   },
   hills: [0x24304f, 0x2c3a5c, 0x36466c],
   forest: [0x1f3040, 0x1a2a38, 0x253848, 0x2c3e4e], // dark silhouetted tree line
@@ -288,6 +307,9 @@ const LAVA: Theme = {
     ramp: 0xb5461e, // glowing molten kicker
     water: 0xe0632a, // molten lava channel (no water here — reads as lava)
     bridge: 0x2e211c, // charred timber deck
+    waterHighlight: 0xffb066, // brighter ember highlight (matches sunColor)
+    bridgeRail: 0x1a120e, // near-black charred rail/post
+    rampAccent: 0xffe066, // glowing yellow-hot kicker lip
   },
   hills: [0x3a221c, 0x4a2a20, 0x5a3226], // dark volcanic ridges
   forest: [0x2a1c18, 0x241714, 0x33201c, 0x3a2620], // charred tree line

@@ -13,6 +13,9 @@ import {
   terrainColorForKind,
   buildTerrainStrip,
   groundBackdropExtent,
+  sampleGroundY,
+  findRampPeak,
+  bridgePlankPositions,
   TERRAIN_FRONT_Z,
   APRON_RUN,
   APRON_DROP,
@@ -259,5 +262,100 @@ describe('groundBackdropExtent', () => {
 
   it('is deterministic for the same course bounds', () => {
     expect(groundBackdropExtent(10, 500)).toEqual(groundBackdropExtent(10, 500))
+  })
+})
+
+describe('sampleGroundY (Stage-4 feature geometry helper)', () => {
+  it('returns the exact y at an existing ground point', () => {
+    const ground = [
+      { x: 0, y: 0 },
+      { x: 10, y: 5 },
+      { x: 20, y: 0 },
+    ]
+    expect(sampleGroundY(ground, 10)).toBe(5)
+  })
+
+  it('linearly interpolates between two ground points', () => {
+    const ground = [
+      { x: 0, y: 0 },
+      { x: 10, y: 10 },
+    ]
+    expect(sampleGroundY(ground, 5)).toBeCloseTo(5, 5)
+    expect(sampleGroundY(ground, 2.5)).toBeCloseTo(2.5, 5)
+  })
+
+  it('clamps to the first/last point outside the polyline range', () => {
+    const ground = [
+      { x: 10, y: 3 },
+      { x: 20, y: 7 },
+    ]
+    expect(sampleGroundY(ground, 0)).toBe(3)
+    expect(sampleGroundY(ground, 100)).toBe(7)
+  })
+
+  it('returns 0 for an empty polyline', () => {
+    expect(sampleGroundY([], 5)).toBe(0)
+  })
+})
+
+describe('findRampPeak (Stage-4 feature geometry helper)', () => {
+  it('finds the highest point within the given x range', () => {
+    const ground = [
+      { x: 0, y: 0 },
+      { x: 5, y: 3 },
+      { x: 10, y: 8 },
+      { x: 15, y: 2 },
+      { x: 20, y: 0 },
+    ]
+    const peak = findRampPeak(ground, 0, 20)
+    expect(peak).toEqual({ x: 10, y: 8 })
+  })
+
+  it('only considers points within [xStart, xEnd]', () => {
+    const ground = [
+      { x: 0, y: 100 }, // outside range — must be ignored
+      { x: 10, y: 3 },
+      { x: 15, y: 8 },
+      { x: 20, y: 1 },
+    ]
+    const peak = findRampPeak(ground, 10, 20)
+    expect(peak).toEqual({ x: 15, y: 8 })
+  })
+
+  it('returns undefined when no points fall in range', () => {
+    const ground = [{ x: 0, y: 0 }]
+    expect(findRampPeak(ground, 10, 20)).toBeUndefined()
+  })
+})
+
+describe('bridgePlankPositions (Stage-4 feature geometry helper)', () => {
+  it('spaces elements evenly across the span with no leftover gap', () => {
+    const positions = bridgePlankPositions(0, 16, 4)
+    expect(positions.length).toBe(4)
+    // Evenly spaced at 4 apart, centered within each quarter of the span.
+    expect(positions).toEqual([2, 6, 10, 14])
+  })
+
+  it('always places at least one element for a positive span', () => {
+    const positions = bridgePlankPositions(0, 1, 4)
+    expect(positions.length).toBe(1)
+    expect(positions[0]).toBeCloseTo(0.5, 5)
+  })
+
+  it('every position stays strictly within [xStart, xEnd]', () => {
+    const positions = bridgePlankPositions(10, 33, 1.6)
+    for (const x of positions) {
+      expect(x).toBeGreaterThan(10)
+      expect(x).toBeLessThan(33)
+    }
+  })
+
+  it('returns an empty array for a non-positive span or spacing', () => {
+    expect(bridgePlankPositions(10, 10, 1.6)).toEqual([])
+    expect(bridgePlankPositions(10, 20, 0)).toEqual([])
+  })
+
+  it('is deterministic', () => {
+    expect(bridgePlankPositions(5, 27.4, 1.6)).toEqual(bridgePlankPositions(5, 27.4, 1.6))
   })
 })

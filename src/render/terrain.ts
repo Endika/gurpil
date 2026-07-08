@@ -13,7 +13,7 @@
  */
 
 import * as THREE from 'three'
-import { zoneAt, type Course, type Obstacle, type TerrainKind } from '../core/course'
+import { zoneAt, type Course, type Obstacle, type TerrainKind, type Zone } from '../core/course'
 import type { Point } from '../core/classifyStroke'
 import type { Theme } from '../core/theme'
 
@@ -364,6 +364,326 @@ export function buildTerrainStrip(
   return { positions, colors, indices }
 }
 
+// ─── Stage-4 terrain feature geometry (water / bridge / ramp) ─────────────────
+//
+// Water, bridges and ramps used to be pure COLOR over the flat/ramp ground.
+// This section adds real decorative geometry on top of the existing
+// traversable strip built above: it never changes course.ground (the
+// collider), only what sits visually on top of it.
+//
+// OCCLUSION SAFETY: the vehicle rides at world z=0 and the strip's own front
+// (near-camera) edge already sits only a small margin ahead of it (see the
+// TERRAIN_FRONT_Z / scene.ts TERRAIN_Z doc comments). Flat, thin overlays
+// (the water surface, bridge planks) stay coplanar with the ground — same
+// risk class as the terrain's own top face — so they may span the strip's
+// full depth. TALL decorations (bridge rails/posts, ramp struts) are instead
+// placed at the two DECOR_ROW_*_Z rows below, both drawn from the BACK HALF
+// of the strip's depth — mirroring the safe convention already used for
+// raised props in scenery.ts (roadside trees/bushes sit behind the road's own
+// back edge) — so nothing added here can ever occlude the vehicle.
+
+/** Pure helper: linearly interpolate the ground polyline's y at world x.
+ *  Used to place decoration at the correct height without assuming BASE_Y —
+ *  works for the flat water/bridge zones and the sloped ramp faces alike. */
+export function sampleGroundY(ground: Point[], x: number): number {
+  if (ground.length === 0) return 0
+  if (x <= ground[0].x) return ground[0].y
+  for (let i = 0; i < ground.length - 1; i++) {
+    const a = ground[i]
+    const b = ground[i + 1]
+    if (x >= a.x && x <= b.x) {
+      const t = b.x === a.x ? 0 : (x - a.x) / (b.x - a.x)
+      return a.y + t * (b.y - a.y)
+    }
+  }
+  return ground[ground.length - 1].y
+}
+
+/** Pure helper: the highest ground point within [xStart, xEnd] — the ramp's
+ *  kicker peak (where the up-face meets the down-face). Returns undefined for
+ *  a degenerate/empty range (defensive; every generated ramp has one). */
+export function findRampPeak(ground: Point[], xStart: number, xEnd: number): Point | undefined {
+  let peak: Point | undefined
+  for (const p of ground) {
+    if (p.x < xStart || p.x > xEnd) continue
+    if (!peak || p.y > peak.y) peak = p
+  }
+  return peak
+}
+
+/**
+ * Pure helper: deterministic, evenly-spaced element centers across [xStart,
+ * xEnd) at roughly `spacing` apart — used for bridge plank slats and rail
+ * posts alike. Always fits at least one element and spaces the actual count
+ * evenly across the full span (no leftover gap at one end).
+ */
+export function bridgePlankPositions(xStart: number, xEnd: number, spacing: number): number[] {
+  const span = xEnd - xStart
+  if (span <= 0 || spacing <= 0) return []
+  const count = Math.max(1, Math.round(span / spacing))
+  const actualSpacing = span / count
+  return Array.from({ length: count }, (_, i) => xStart + actualSpacing * (i + 0.5))
+}
+
+// ── Shared depth rows for TALL decorations (see OCCLUSION SAFETY above) ───────
+
+/** Margin pulling flat overlays (water surface, bridge deck) in from the
+ *  strip's true front/back edges, avoiding z-fighting with the terrain mesh's
+ *  own edge triangles. */
+const FEATURE_EDGE_MARGIN = 0.3
+
+/** Near depth row for tall decorations: the strip's own mid-depth — already
+ *  well clear of the front edge / vehicle plane. */
+const DECOR_ROW_NEAR_Z = (TERRAIN_FRONT_Z + TERRAIN_BACK_Z) / 2
+/** Far depth row: close to the strip's back edge, matching the scenery.ts
+ *  "raised props stay behind the road" convention. */
+const DECOR_ROW_FAR_Z = TERRAIN_BACK_Z + FEATURE_EDGE_MARGIN
+
+// ── Water surface ───────────────────────────────────────────────────────────
+
+const WATER_Y_OFFSET = 0.03
+const WATER_SECOND_LAYER_Y_OFFSET = 0.09
+const WATER_OPACITY = 0.62
+const WATER_SECOND_LAYER_OPACITY = 0.28
+const WATER_ROUGHNESS = 0.25
+const WATER_METALNESS = 0.05
+/** Ripple amplitude/frequency: a gentle static sine wave along x — fully
+ *  deterministic (no Math.random), never animated, so it never flickers. */
+const WATER_RIPPLE_AMPLITUDE = 0.05
+const WATER_RIPPLE_FREQUENCY = 0.35
+/** Second layer's ripple is phase-shifted so it doesn't sit exactly in sync
+ *  with the first, reading as two loosely-related wave layers. */
+const WATER_SECOND_LAYER_PHASE = Math.PI / 2
+const WATER_RIPPLE_SEGMENT_LENGTH = 2
+const WATER_DEPTH_SEGMENTS = 2
+
+function buildWaterLayer(
+  zone: Zone,
+  groundY: number,
+  color: number,
+  yOffset: number,
+  opacity: number,
+  phase: number,
+): THREE.Mesh {
+  const len = zone.xEnd - zone.xStart
+  const segmentsX = Math.max(1, Math.round(len / WATER_RIPPLE_SEGMENT_LENGTH))
+  const geo = new THREE.PlaneGeometry(len, TERRAIN_DEPTH, segmentsX, WATER_DEPTH_SEGMENTS)
+  geo.rotateX(-Math.PI / 2) // lie flat, normal +y
+
+  const pos = geo.getAttribute('position')
+  const midX = zone.xStart + len / 2
+  for (let i = 0; i < pos.count; i++) {
+    const worldX = midX + pos.getX(i)
+    const ripple = WATER_RIPPLE_AMPLITUDE * Math.sin(worldX * WATER_RIPPLE_FREQUENCY + phase)
+    pos.setY(i, ripple)
+  }
+  pos.needsUpdate = true
+  geo.computeVertexNormals()
+
+  const mat = new THREE.MeshStandardMaterial({
+    color,
+    transparent: true,
+    opacity,
+    roughness: WATER_ROUGHNESS,
+    metalness: WATER_METALNESS,
+    side: THREE.DoubleSide,
+  })
+  const mesh = new THREE.Mesh(geo, mat)
+  mesh.position.set(midX, groundY + yOffset, (TERRAIN_FRONT_Z + TERRAIN_BACK_Z) / 2)
+  mesh.receiveShadow = true
+  return mesh
+}
+
+/** Build a water zone's visual surface: two translucent, gently-rippled
+ *  layers over the (unchanged) flat ford ground so it reads as real water. */
+function buildWaterFeature(zone: Zone, ground: Point[], theme: Theme): THREE.Group {
+  const group = new THREE.Group()
+  const groundY = sampleGroundY(ground, (zone.xStart + zone.xEnd) / 2)
+  group.add(buildWaterLayer(zone, groundY, theme.terrain.water, WATER_Y_OFFSET, WATER_OPACITY, 0))
+  group.add(
+    buildWaterLayer(
+      zone,
+      groundY,
+      theme.terrain.waterHighlight,
+      WATER_SECOND_LAYER_Y_OFFSET,
+      WATER_SECOND_LAYER_OPACITY,
+      WATER_SECOND_LAYER_PHASE,
+    ),
+  )
+  return group
+}
+
+// ── Bridge planks + railing ─────────────────────────────────────────────────
+
+const BRIDGE_PLANK_SPACING = 1.6
+const BRIDGE_PLANK_WIDTH_X = 1.1
+const BRIDGE_PLANK_HEIGHT = 0.12
+const BRIDGE_PLANK_Y_OFFSET = BRIDGE_PLANK_HEIGHT / 2
+const BRIDGE_PLANK_ROUGHNESS = 0.85
+
+const BRIDGE_RAIL_POST_SPACING = 4
+const BRIDGE_RAIL_POST_HEIGHT = 0.6
+const BRIDGE_RAIL_POST_RADIUS = 0.06
+const BRIDGE_RAIL_POST_SEGMENTS = 6
+const BRIDGE_RAIL_HEIGHT_Y = 0.55
+const BRIDGE_RAIL_THICKNESS = 0.08
+const BRIDGE_RAIL_ROUGHNESS = 0.8
+
+function buildBridgePlanks(zone: Zone, groundY: number, theme: Theme): THREE.InstancedMesh {
+  const positions = bridgePlankPositions(zone.xStart, zone.xEnd, BRIDGE_PLANK_SPACING)
+  const plankDepth = TERRAIN_DEPTH - 2 * FEATURE_EDGE_MARGIN
+  const geo = new THREE.BoxGeometry(BRIDGE_PLANK_WIDTH_X, BRIDGE_PLANK_HEIGHT, plankDepth)
+  const mat = new THREE.MeshStandardMaterial({ color: theme.terrain.bridge, roughness: BRIDGE_PLANK_ROUGHNESS })
+  const mesh = new THREE.InstancedMesh(geo, mat, positions.length)
+  const midZ = (TERRAIN_FRONT_Z + TERRAIN_BACK_Z) / 2
+  const m = new THREE.Matrix4()
+  positions.forEach((x, i) => {
+    m.makeTranslation(x, groundY + BRIDGE_PLANK_Y_OFFSET, midZ)
+    mesh.setMatrixAt(i, m)
+  })
+  mesh.castShadow = true
+  mesh.receiveShadow = true
+  return mesh
+}
+
+/** Rail posts at both DECOR_ROW depth rows (see OCCLUSION SAFETY above) — a
+ *  single InstancedMesh for every post across both rows. */
+function buildBridgeRailPosts(zone: Zone, groundY: number, theme: Theme): THREE.InstancedMesh {
+  const positions = bridgePlankPositions(zone.xStart, zone.xEnd, BRIDGE_RAIL_POST_SPACING)
+  const geo = new THREE.CylinderGeometry(
+    BRIDGE_RAIL_POST_RADIUS,
+    BRIDGE_RAIL_POST_RADIUS,
+    BRIDGE_RAIL_POST_HEIGHT,
+    BRIDGE_RAIL_POST_SEGMENTS,
+  )
+  const mat = new THREE.MeshStandardMaterial({ color: theme.terrain.bridgeRail, roughness: BRIDGE_RAIL_ROUGHNESS })
+  const mesh = new THREE.InstancedMesh(geo, mat, positions.length * 2)
+  const m = new THREE.Matrix4()
+  let idx = 0
+  for (const x of positions) {
+    for (const z of [DECOR_ROW_NEAR_Z, DECOR_ROW_FAR_Z]) {
+      m.makeTranslation(x, groundY + BRIDGE_RAIL_POST_HEIGHT / 2, z)
+      mesh.setMatrixAt(idx++, m)
+    }
+  }
+  mesh.castShadow = true
+  return mesh
+}
+
+/** The two horizontal rail bars running the bridge's full length, one per
+ *  DECOR_ROW depth row. */
+function buildBridgeRailBars(zone: Zone, groundY: number, theme: Theme): THREE.Group {
+  const group = new THREE.Group()
+  const len = zone.xEnd - zone.xStart
+  const geo = new THREE.BoxGeometry(len, BRIDGE_RAIL_THICKNESS, BRIDGE_RAIL_THICKNESS)
+  const mat = new THREE.MeshStandardMaterial({ color: theme.terrain.bridgeRail, roughness: BRIDGE_RAIL_ROUGHNESS })
+  for (const z of [DECOR_ROW_NEAR_Z, DECOR_ROW_FAR_Z]) {
+    const rail = new THREE.Mesh(geo, mat)
+    rail.position.set(zone.xStart + len / 2, groundY + BRIDGE_RAIL_HEIGHT_Y, z)
+    rail.castShadow = true
+    group.add(rail)
+  }
+  return group
+}
+
+/** Build a bridge zone's visual deck: wooden plank slats across the span plus
+ *  simple post-and-rail railing along its length. Purely decorative — the
+ *  collider is the unchanged flat course.ground strip underneath. */
+function buildBridgeFeature(zone: Zone, ground: Point[], theme: Theme): THREE.Group {
+  const group = new THREE.Group()
+  const groundY = sampleGroundY(ground, (zone.xStart + zone.xEnd) / 2)
+  group.add(buildBridgePlanks(zone, groundY, theme))
+  group.add(buildBridgeRailPosts(zone, groundY, theme))
+  group.add(buildBridgeRailBars(zone, groundY, theme))
+  return group
+}
+
+// ── Ramp kicker lip + support struts ────────────────────────────────────────
+
+const RAMP_LIP_WIDTH_X = 0.6
+const RAMP_LIP_HEIGHT = 0.18
+const RAMP_LIP_Y_OFFSET = RAMP_LIP_HEIGHT / 2
+const RAMP_LIP_ROUGHNESS = 0.6
+
+const RAMP_STRUT_THICKNESS = 0.25
+/** Struts sit slightly BELOW the ramp's own up-face line so they read as a
+ *  support beam under the surface rather than floating on top of it. */
+const RAMP_STRUT_Y_DROP = 0.2
+const RAMP_STRUT_ROUGHNESS = 0.7
+
+function buildRampLip(peak: Point, theme: Theme): THREE.Mesh {
+  const depth = TERRAIN_DEPTH - 2 * FEATURE_EDGE_MARGIN
+  const geo = new THREE.BoxGeometry(RAMP_LIP_WIDTH_X, RAMP_LIP_HEIGHT, depth)
+  const mat = new THREE.MeshStandardMaterial({ color: theme.terrain.rampAccent, roughness: RAMP_LIP_ROUGHNESS })
+  const mesh = new THREE.Mesh(geo, mat)
+  mesh.position.set(peak.x, peak.y + RAMP_LIP_Y_OFFSET, (TERRAIN_FRONT_Z + TERRAIN_BACK_Z) / 2)
+  mesh.castShadow = true
+  mesh.receiveShadow = true
+  return mesh
+}
+
+/** A single diagonal support beam along the ramp's up-face, from its base to
+ *  its peak, at one of the two DECOR_ROW depth rows (see OCCLUSION SAFETY). */
+function buildRampStrut(baseX: number, baseY: number, peak: Point, z: number, theme: Theme): THREE.Mesh {
+  const dx = peak.x - baseX
+  const dy = peak.y - baseY
+  const length = Math.hypot(dx, dy)
+  const angle = Math.atan2(dy, dx)
+  const geo = new THREE.BoxGeometry(length, RAMP_STRUT_THICKNESS, RAMP_STRUT_THICKNESS)
+  const mat = new THREE.MeshStandardMaterial({ color: theme.terrain.rampAccent, roughness: RAMP_STRUT_ROUGHNESS })
+  const mesh = new THREE.Mesh(geo, mat)
+  mesh.rotation.z = angle
+  mesh.position.set((baseX + peak.x) / 2, (baseY + peak.y) / 2 - RAMP_STRUT_Y_DROP, z)
+  mesh.castShadow = true
+  mesh.receiveShadow = true
+  return mesh
+}
+
+/** Build a ramp zone's visual kicker: an accent lip at the peak plus a pair
+ *  of support struts under the up-face, so it reads as a BUILT jump ramp
+ *  rather than plain sloped ground. Purely decorative — the collider is the
+ *  unchanged course.ground slope underneath. Returns undefined for a
+ *  degenerate zone (no discernible peak); defensive, never hit in practice. */
+function buildRampFeature(zone: Zone, ground: Point[], theme: Theme): THREE.Group | undefined {
+  const peak = findRampPeak(ground, zone.xStart, zone.xEnd)
+  if (!peak || peak.x <= zone.xStart) return undefined
+
+  const baseY = sampleGroundY(ground, zone.xStart)
+  const group = new THREE.Group()
+  group.add(buildRampLip(peak, theme))
+  group.add(buildRampStrut(zone.xStart, baseY, peak, DECOR_ROW_NEAR_Z, theme))
+  group.add(buildRampStrut(zone.xStart, baseY, peak, DECOR_ROW_FAR_Z, theme))
+  return group
+}
+
+/**
+ * Build the decorative geometry for every water/bridge/ramp zone in the
+ * course. Returns a single Group (empty if the course has none) meant to be
+ * added as a CHILD of the terrain mesh, so it inherits the same local→world
+ * placement (TERRAIN_Z) scene.ts applies to the strip itself.
+ */
+export function buildTerrainFeatureMeshes(course: Course, theme: Theme): THREE.Group {
+  const group = new THREE.Group()
+  for (const zone of course.zones) {
+    switch (zone.kind) {
+      case 'water':
+        group.add(buildWaterFeature(zone, course.ground, theme))
+        break
+      case 'bridge':
+        group.add(buildBridgeFeature(zone, course.ground, theme))
+        break
+      case 'ramp': {
+        const rampGroup = buildRampFeature(zone, course.ground, theme)
+        if (rampGroup) group.add(rampGroup)
+        break
+      }
+      default:
+        break
+    }
+  }
+  return group
+}
+
 // ─── Obstacle variant mesh builders ────────────────────────────────────────────
 
 /**
@@ -458,7 +778,14 @@ export function buildTerrainMesh(course: Course, theme: Theme): THREE.Mesh {
     metalness: TERRAIN_METALNESS,
   })
 
-  return new THREE.Mesh(geo, mat)
+  const mesh = new THREE.Mesh(geo, mat)
+
+  // Water/bridge/ramp decorative geometry, added as CHILDREN so it inherits
+  // the mesh's own position.z (TERRAIN_Z, applied by the caller) automatically
+  // — see buildTerrainFeatureMeshes doc comment.
+  mesh.add(buildTerrainFeatureMeshes(course, theme))
+
+  return mesh
 }
 
 /**
