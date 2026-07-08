@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/Endika/gurpil/compare/v0.6.0...v0.6.1) (2026-07-08)
+
+
+### Bug Fixes
+
+* **render:** zoom the camera in so the vehicle reads bigger (esp. mobile portrait) ([008c8a0](https://github.com/Endika/gurpil/commit/008c8a04b1971e14d4aa8619d13e351c89d46599))
+
 ## [0.6.0](https://github.com/Endika/gurpil/compare/v0.5.0...v0.6.0) (2026-07-08)
 
 
