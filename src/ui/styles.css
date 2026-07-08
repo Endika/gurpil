@@ -28,6 +28,66 @@
   --gurpil-safe-left: env(safe-area-inset-left, 0px);
 
   --gurpil-font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+
+  /* Shared radii/easing so cards, pills and buttons stay visually consistent
+   * (single source of truth instead of repeating magic numbers per rule). */
+  --gurpil-radius-sm: 10px;
+  --gurpil-radius-md: 16px;
+  --gurpil-radius-lg: 22px;
+  --gurpil-radius-pill: 999px;
+  --gurpil-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Glass-card surface used by overlay panels (finish / endless game-over). */
+  --gurpil-card-bg: linear-gradient(160deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03));
+  --gurpil-card-border: rgba(255, 255, 255, 0.16);
+}
+
+/* ─── Shared entrance animations (respect prefers-reduced-motion below) ──── */
+
+@keyframes gurpil-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes gurpil-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes gurpil-pulse {
+  0%,
+  100% {
+    opacity: 0.32;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* ─── Shared headline treatment (app title + level-select title) ─────────── */
+
+.hud-title,
+.select-title {
+  margin: 0;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  background: linear-gradient(135deg, var(--gurpil-coral), var(--gurpil-yellow), var(--gurpil-mint));
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
 }
 
 /* ─── Timer readout ─────────────────────────────────────────────────────── */
@@ -48,7 +108,7 @@
   letter-spacing: 0.02em;
 
   padding: 0.4rem 1.25rem;
-  border-radius: 999px;
+  border-radius: var(--gurpil-radius-pill);
   background: linear-gradient(135deg, var(--gurpil-coral), var(--gurpil-teal));
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
@@ -57,7 +117,7 @@
 
 .hud-target {
   position: fixed;
-  top: calc(3.1rem + var(--gurpil-safe-top));
+  top: calc(3.25rem + var(--gurpil-safe-top));
   left: 50%;
   transform: translateX(-50%);
   z-index: 200;
@@ -67,15 +127,16 @@
   font-weight: 600;
   font-size: clamp(0.75rem, 2.6vw, 0.95rem);
   font-variant-numeric: tabular-nums;
-  color: rgba(255, 255, 255, 0.75);
+  color: rgba(255, 255, 255, 0.8);
   letter-spacing: 0.02em;
+  /* Renders directly over the 3D scene (no backdrop) — a shadow keeps it
+   * legible against bright terrain/sky. */
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
 }
 
 .hud-target[hidden] {
   display: none;
 }
-
-/* ─── Overlays (start / finish) ─────────────────────────────────────────── */
 
 /* ─── Speed gauge (vertical thermometer, left edge) ──────────────────────── */
 
@@ -89,11 +150,22 @@
   z-index: 200;
   pointer-events: none;
 
-  border-radius: 999px;
+  border-radius: var(--gurpil-radius-pill);
   background: rgba(0, 0, 0, 0.35);
   border: 2px solid rgba(255, 255, 255, 0.35);
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* Small decorative marker identifying the gauge — purely visual. */
+.hud-gauge::before {
+  content: '⚡';
+  position: absolute;
+  top: -1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.85rem;
+  opacity: 0.7;
 }
 
 .hud-gauge-fill {
@@ -124,19 +196,21 @@
   line-height: 1;
 
   border: 2px solid rgba(255, 255, 255, 0.35);
-  border-radius: 999px;
+  border-radius: var(--gurpil-radius-pill);
   background: rgba(0, 0, 0, 0.35);
   color: var(--gurpil-ink);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 
   cursor: pointer;
   touch-action: manipulation;
-  transition: transform 0.1s ease;
+  transition: transform 0.1s ease, filter 0.15s ease;
 }
 
 .hud-mute-btn:active {
   transform: scale(0.92);
 }
+
+/* ─── Overlays (start / finish / endless game-over) ──────────────────────── */
 
 .hud-overlay {
   position: fixed;
@@ -174,24 +248,42 @@
   /* Vertically centered: clears the top timer and the bottom-centered draw-box. */
 }
 
+.hud-overlay--start .hud-title {
+  animation: gurpil-fade-in 0.45s var(--gurpil-ease) both;
+}
+
 .hud-overlay--start .hud-prompt {
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+  animation: gurpil-fade-in 0.45s var(--gurpil-ease) 0.1s both;
 }
 
 .hud-title {
-  margin: 0;
   font-size: clamp(2rem, 10vw, 3.5rem);
-  font-weight: 800;
-  background: linear-gradient(135deg, var(--gurpil-coral), var(--gurpil-yellow), var(--gurpil-mint));
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
 }
 
 .hud-prompt {
   margin: 0;
   font-size: clamp(1rem, 4.5vw, 1.4rem);
   opacity: 0.92;
+}
+
+/* ─── Finish / endless-over "card" panel ─────────────────────────────────── */
+
+.hud-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.85rem;
+
+  width: min(90vw, 26rem);
+  padding: 1.75rem 1.5rem;
+
+  border-radius: var(--gurpil-radius-lg);
+  border: 1px solid var(--gurpil-card-border);
+  background: var(--gurpil-card-bg);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+  animation: gurpil-pop-in 0.32s var(--gurpil-ease) both;
 }
 
 .hud-finish-message {
@@ -207,6 +299,13 @@
   font-variant-numeric: tabular-nums;
 }
 
+.hud-medal-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
 .hud-finish-medal {
   margin: 0;
   font-size: clamp(1.3rem, 6vw, 2rem);
@@ -219,6 +318,17 @@
   font-size: clamp(0.95rem, 4vw, 1.2rem);
   font-weight: 600;
   opacity: 0.9;
+}
+
+/* ─── Medal pip (small color badge, shared by finish overlay + level cards) ─ */
+
+.medal-pip {
+  display: inline-block;
+  flex: none;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.2), 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 /* ─── Action buttons (large mobile tap targets) ─────────────────────────── */
@@ -241,12 +351,12 @@
   font-weight: 700;
 
   border: none;
-  border-radius: 999px;
+  border-radius: var(--gurpil-radius-pill);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
 
   cursor: pointer;
   touch-action: manipulation;
-  transition: transform 0.1s ease;
+  transition: transform 0.1s ease, filter 0.15s ease, box-shadow 0.15s ease;
 }
 
 .hud-btn:active {
@@ -263,6 +373,18 @@
   background: rgba(255, 255, 255, 0.12);
   border: 2px solid rgba(255, 255, 255, 0.4);
   box-shadow: none;
+}
+
+/* Hover feedback only for pointer devices — avoids "sticky hover" on touch. */
+@media (hover: hover) {
+  .hud-btn:hover {
+    transform: translateY(-2px);
+    filter: brightness(1.08);
+  }
+
+  .hud-mute-btn:hover {
+    filter: brightness(1.2);
+  }
 }
 
 /* ─── Level select screen ────────────────────────────────────────────────── */
@@ -293,13 +415,7 @@
 }
 
 .select-title {
-  margin: 0;
   font-size: clamp(1.6rem, 7vw, 2.5rem);
-  font-weight: 800;
-  background: linear-gradient(135deg, var(--gurpil-coral), var(--gurpil-yellow), var(--gurpil-mint));
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
 }
 
 .level-grid {
@@ -310,11 +426,12 @@
 }
 
 .level-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.2rem;
+  gap: 0.3rem;
 
   aspect-ratio: 1;
   padding: 0.6rem;
@@ -323,54 +440,97 @@
   color: var(--gurpil-ink);
 
   border: 2px solid rgba(255, 255, 255, 0.25);
-  border-radius: 16px;
-  /* Per-card tint (theme skyHorizon), set inline as --level-tint. */
-  background: linear-gradient(150deg, var(--level-tint, var(--gurpil-teal)), rgba(15, 15, 30, 0.55));
+  border-radius: var(--gurpil-radius-md);
+  /* Per-card tint (theme skyHorizon), set inline as --level-tint. The tint
+   * fades out quickly so text stays legible even on the palest biomes
+   * (snow / grassland / desert). */
+  background: linear-gradient(160deg, var(--level-tint, var(--gurpil-teal)) 0%, rgba(15, 15, 30, 0.82) 42%);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
 
   cursor: pointer;
   touch-action: manipulation;
-  transition: transform 0.1s ease;
+  transition: transform 0.1s ease, box-shadow 0.15s ease;
+  animation: gurpil-pop-in 0.3s var(--gurpil-ease) both;
+  animation-delay: calc(var(--card-i, 0) * 28ms);
 }
 
 .level-card:active {
   transform: scale(0.96);
 }
 
-.level-card--locked {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.12);
-  box-shadow: none;
-  cursor: not-allowed;
-  opacity: 0.65;
+@media (hover: hover) {
+  .level-card:not(.level-card--locked):hover,
+  .endless-card:not(.endless-card--locked):hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.5);
+  }
 }
 
+.level-card--locked {
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px dashed rgba(255, 255, 255, 0.18);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.level-card--locked .level-card-lock {
+  opacity: 0.6;
+}
+
+/* Number badge — a small chip pinned to the corner (positioned absolutely so
+ * it never fights the centered content below it), always dark regardless of
+ * the card's biome tint so it stays legible on every theme. */
 .level-card-number {
-  font-size: clamp(1.3rem, 6vw, 1.7rem);
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.42);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+
+  font-size: clamp(0.75rem, 3.2vw, 0.9rem);
   font-weight: 800;
   line-height: 1;
-  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
 }
 
 .level-card-lock {
   font-size: clamp(1.1rem, 5vw, 1.4rem);
 }
 
+.level-card-locked-label {
+  font-size: clamp(0.55rem, 2.4vw, 0.68rem);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
 .level-card-theme {
   font-size: clamp(0.62rem, 2.8vw, 0.78rem);
   font-weight: 600;
   opacity: 0.95;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
 }
 
 .level-card-medal {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
   font-size: clamp(0.6rem, 2.7vw, 0.75rem);
   font-weight: 700;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
 }
 
 .level-card-best {
   font-size: clamp(0.58rem, 2.6vw, 0.72rem);
   font-variant-numeric: tabular-nums;
   opacity: 0.9;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
 }
 
 /* ─── Endless entry (wide card below the campaign grid) ──────────────────── */
@@ -380,7 +540,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.25rem;
+  gap: 0.3rem;
 
   width: min(92vw, 30rem);
   padding: 1rem 1.25rem;
@@ -389,13 +549,14 @@
   color: var(--gurpil-ink);
 
   border: 2px solid rgba(255, 255, 255, 0.3);
-  border-radius: 16px;
+  border-radius: var(--gurpil-radius-md);
   background: linear-gradient(135deg, var(--gurpil-teal), var(--gurpil-coral));
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
 
   cursor: pointer;
   touch-action: manipulation;
-  transition: transform 0.1s ease;
+  transition: transform 0.1s ease, box-shadow 0.15s ease;
+  animation: gurpil-pop-in 0.3s var(--gurpil-ease) 0.42s both;
 }
 
 .endless-card:active {
@@ -413,6 +574,9 @@
 .endless-card-icon {
   font-size: clamp(1.4rem, 6vw, 1.9rem);
   line-height: 1;
+  padding: 0.3rem;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.22);
 }
 
 .endless-card-name {
@@ -438,7 +602,7 @@
   height: clamp(120px, 30vw, 220px);
   box-sizing: border-box;
 
-  border-radius: 16px;
+  border-radius: var(--gurpil-radius-md);
   border: 3px solid rgba(255, 255, 255, 0.4);
   overflow: hidden;
   background: rgba(0, 0, 0, 0.18);
@@ -451,8 +615,41 @@
   transition: border-color 0.15s ease;
 }
 
+/* Idle hint (pencil glyph) shown whenever the canvas is empty — sits behind
+ * the canvas so any drawn stroke / feedback label naturally covers it, and
+ * the box never reads as an inert empty square. Purely decorative: no text,
+ * so no i18n key needed (consistent with the other decorative glyphs in
+ * levelSelect.ts / hud.ts). */
+.draw-box::before {
+  content: '✏️';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(28px, 9vw, 44px);
+  opacity: 0.32;
+  pointer-events: none;
+  animation: gurpil-pulse 2.6s ease-in-out infinite;
+}
+
 .draw-box canvas {
+  position: relative;
+  z-index: 1;
   display: block;
   width: 100%;
   height: 100%;
+}
+
+/* ─── Reduced motion ──────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-overlay--start .hud-title,
+  .hud-overlay--start .hud-prompt,
+  .hud-card,
+  .level-card,
+  .endless-card,
+  .draw-box::before {
+    animation: none;
+  }
 }

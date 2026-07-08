@@ -168,6 +168,9 @@ function buildCard(level: Level, opts: LevelSelectOptions): HTMLElement {
   card.className = `level-card${view.locked ? ' level-card--locked' : ''}`
   card.dataset['level'] = String(level.number)
   card.style.setProperty('--level-tint', hexColor(theme.skyHorizon))
+  // Staggers the grid's entrance animation card-by-card (see .level-card in
+  // styles.css) — purely cosmetic, read by CSS only.
+  card.style.setProperty('--card-i', String(level.number - 1))
 
   const number = document.createElement('span')
   number.className = 'level-card-number'
@@ -178,8 +181,15 @@ function buildCard(level: Level, opts: LevelSelectOptions): HTMLElement {
     const lock = document.createElement('span')
     lock.className = 'level-card-lock'
     lock.textContent = LOCK_ICON
-    lock.setAttribute('aria-label', t('levelSelect.locked'))
     card.appendChild(lock)
+
+    // Visible caption (not just an aria-label) so locked cards read clearly
+    // at a glance, not merely as "the ones with a padlock".
+    const lockedLabel = document.createElement('span')
+    lockedLabel.className = 'level-card-locked-label'
+    lockedLabel.textContent = t('levelSelect.locked')
+    card.appendChild(lockedLabel)
+
     card.disabled = true
     card.setAttribute('aria-label', `${t('levelSelect.level')} ${level.number} — ${t('levelSelect.locked')}`)
     return card
@@ -190,10 +200,18 @@ function buildCard(level: Level, opts: LevelSelectOptions): HTMLElement {
   themeLabel.textContent = `${THEME_ICONS[level.themeId]} ${t(themeMessageKey(level.themeId))}`
   card.appendChild(themeLabel)
 
+  // Medal row: a small color pip + label, echoed on the finish overlay so the
+  // same "earned medal" concept reads the same way in both places.
   const medal = document.createElement('span')
   medal.className = 'level-card-medal'
-  medal.style.color = medalColorVar(view.medal)
-  medal.textContent = t(medalMessageKey(view.medal))
+  const medalPip = document.createElement('span')
+  medalPip.className = 'medal-pip'
+  medalPip.style.background = medalColorVar(view.medal)
+  medal.appendChild(medalPip)
+  const medalLabel = document.createElement('span')
+  medalLabel.style.color = medalColorVar(view.medal)
+  medalLabel.textContent = t(medalMessageKey(view.medal))
+  medal.appendChild(medalLabel)
   card.appendChild(medal)
 
   const best = document.createElement('span')

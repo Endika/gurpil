@@ -203,22 +203,36 @@ export function createHud(root: HTMLElement, callbacks: HudCallbacks): Hud {
   finishOverlay.dataset['hud'] = 'finish'
   finishOverlay.hidden = true
 
+  // A distinct "card" panel (vs. the full-screen backdrop) gives the overlay a
+  // clearer visual hierarchy and a contained surface to animate in.
+  const finishCard = document.createElement('div')
+  finishCard.className = 'hud-card'
+  finishOverlay.appendChild(finishCard)
+
   const finishMessage = document.createElement('p')
   finishMessage.className = 'hud-finish-message'
   finishMessage.textContent = t('hud.finish')
-  finishOverlay.appendChild(finishMessage)
+  finishCard.appendChild(finishMessage)
 
   const finishTime = document.createElement('p')
   finishTime.className = 'hud-finish-time'
-  finishOverlay.appendChild(finishTime)
+  finishCard.appendChild(finishTime)
 
+  // Medal row: a small color pip alongside the label reads as a "badge" at a
+  // glance, echoing the level-select cards' medal treatment.
+  const finishMedalRow = document.createElement('div')
+  finishMedalRow.className = 'hud-medal-row'
+  const finishMedalPip = document.createElement('span')
+  finishMedalPip.className = 'medal-pip'
+  finishMedalRow.appendChild(finishMedalPip)
   const finishMedal = document.createElement('p')
   finishMedal.className = 'hud-finish-medal'
-  finishOverlay.appendChild(finishMedal)
+  finishMedalRow.appendChild(finishMedal)
+  finishCard.appendChild(finishMedalRow)
 
   const finishBest = document.createElement('p')
   finishBest.className = 'hud-finish-best'
-  finishOverlay.appendChild(finishBest)
+  finishCard.appendChild(finishBest)
 
   const buttonRow = document.createElement('div')
   buttonRow.className = 'hud-btn-row'
@@ -256,7 +270,7 @@ export function createHud(root: HTMLElement, callbacks: HudCallbacks): Hud {
   })
   buttonRow.appendChild(levelsBtn)
 
-  finishOverlay.appendChild(buttonRow)
+  finishCard.appendChild(buttonRow)
 
   root.appendChild(finishOverlay)
 
@@ -268,18 +282,22 @@ export function createHud(root: HTMLElement, callbacks: HudCallbacks): Hud {
   endlessOverlay.dataset['hud'] = 'endless-over'
   endlessOverlay.hidden = true
 
+  const endlessCard = document.createElement('div')
+  endlessCard.className = 'hud-card'
+  endlessOverlay.appendChild(endlessCard)
+
   const endlessMessage = document.createElement('p')
   endlessMessage.className = 'hud-finish-message'
   endlessMessage.textContent = t('endless.gameOver')
-  endlessOverlay.appendChild(endlessMessage)
+  endlessCard.appendChild(endlessMessage)
 
   const endlessDistance = document.createElement('p')
   endlessDistance.className = 'hud-finish-time'
-  endlessOverlay.appendChild(endlessDistance)
+  endlessCard.appendChild(endlessDistance)
 
   const endlessBest = document.createElement('p')
   endlessBest.className = 'hud-finish-best'
-  endlessOverlay.appendChild(endlessBest)
+  endlessCard.appendChild(endlessBest)
 
   const endlessButtonRow = document.createElement('div')
   endlessButtonRow.className = 'hud-btn-row'
@@ -304,7 +322,7 @@ export function createHud(root: HTMLElement, callbacks: HudCallbacks): Hud {
   })
   endlessButtonRow.appendChild(endlessLevelsBtn)
 
-  endlessOverlay.appendChild(endlessButtonRow)
+  endlessCard.appendChild(endlessButtonRow)
 
   root.appendChild(endlessOverlay)
 
@@ -341,6 +359,7 @@ export function createHud(root: HTMLElement, callbacks: HudCallbacks): Hud {
 
       finishMedal.textContent = `${t('hud.medal')}: ${t(medalMessageKey(result.medal))}`
       finishMedal.style.color = medalColorVar(result.medal)
+      finishMedalPip.style.background = medalColorVar(result.medal)
 
       const bestMs = result.best.bestMs
       finishBest.textContent =
