@@ -35,7 +35,7 @@ import type { Point } from '../core/classifyStroke'
 
 /** How far scenery extends before startX / after finishX (metres) so props
  *  are already in view at the very start/end of the course, not popping in. */
-const COURSE_MARGIN = 25
+const COURSE_MARGIN = 40
 
 // ─── Determinism seeds ──────────────────────────────────────────────────────
 // Arbitrary, mutually distinct constants so each layer's hash stream is
@@ -65,15 +65,27 @@ const FOREST_BAND_Z = -125
 const FOREST_BAND_PARALLAX = 0.94
 const FOREST_BASE_Y = 3
 const FOREST_BAND_HALF_WIDTH = 260
-const FOREST_BAND_SPACING = 6.5
-const FOREST_TREE_HEIGHT_MIN = 6
-const FOREST_TREE_HEIGHT_MAX = 14
-const FOREST_TREE_RADIUS_MIN = 2
-const FOREST_TREE_RADIUS_MAX = 4
+/** Dense spacing (canopies well wider than this) so the band reads as one
+ *  CONTINUOUS hazy tree line, not a row of separated spikes. */
+const FOREST_BAND_SPACING = 5
+/**
+ * Canopy heights/radii tuned so the tallest-thinnest tree is only ~2.6× as tall
+ * as it is wide — soft, rounded firs, NOT the sharp spires the old (up to 7×)
+ * ratio produced. Half the canopies are ROUNDED BLOBS (see FOREST_BLOB_FRACTION)
+ * which further breaks up any remaining pointiness.
+ */
+const FOREST_TREE_HEIGHT_MIN = 5
+const FOREST_TREE_HEIGHT_MAX = 8
+const FOREST_TREE_RADIUS_MIN = 3
+const FOREST_TREE_RADIUS_MAX = 4.5
+/** Radial segments of the softened cone canopies (smoother than the old 7). */
+const FOREST_CONE_SEGMENTS = 9
+/** Fraction of canopies rendered as rounded blobs instead of (fat) cones. */
+const FOREST_BLOB_FRACTION = 0.5
 /** Extra depth spread within the band, so it doesn't read as one flat card. */
-const FOREST_Z_JITTER = 10
+const FOREST_Z_JITTER = 12
 /** Hazy, fog-tinted greens — deliberately muted/desaturated at this distance. */
-const FOREST_COLORS = [0x5c7d68, 0x4a6b58, 0x6f8f78]
+const FOREST_COLORS = [0x5c7d68, 0x4a6b58, 0x6f8f78, 0x7a9384]
 
 // ─── Roadside trees ──────────────────────────────────────────────────────────
 // Trunk cylinder + two foliage spheres (low + high tier), set back well
@@ -275,7 +287,7 @@ export function buildScenery(course: Course): Scenery {
   const group = new THREE.Group()
 
   const forest = buildForestBand()
-  group.add(forest.mesh)
+  group.add(forest.group)
 
   group.add(buildTrees(course))
 
@@ -290,8 +302,8 @@ export function buildScenery(course: Course): Scenery {
   return {
     group,
     update(camX: number, camY: number): void {
-      forest.mesh.position.x = camX * forest.parallax
-      forest.mesh.position.y = camY * forest.parallax + forest.baseY
+      forest.group.position.x = camX * forest.parallax
+      forest.group.position.y = camY * forest.parallax + forest.baseY
     },
   }
 }
@@ -299,26 +311,69 @@ export function buildScenery(course: Course): Scenery {
 // ─── Internal builders ────────────────────────────────────────────────────────
 
 interface ForestBand {
-  mesh: THREE.InstancedMesh
+  /** Sub-group holding both canopy meshes; the whole group parallax-follows the
+   *  camera each frame (see Scenery.update). */
+  group: THREE.Group
   parallax: number
   baseY: number
 }
 
 /**
- * Build the distant forest band: a hazy row of simple cone silhouettes just
- * behind the farthest parallax hill. Unlit (fog-affected) MeshBasicMaterial,
- * no shadows — cheap, and it fades into the fog exactly like the hills do.
+ * Build the distant forest band: a hazy, CONTINUOUS tree line just behind the
+ * farthest parallax hill, fading into the fog like the hills do. Softened vs the
+ * old sharp spires — canopies are FAT rounded cones AND rounded blobs (mixed
+ * ~50/50, see FOREST_BLOB_FRACTION), placed densely so overlapping crowns read
+ * as one soft band rather than pointy firs marching to infinity. Two unlit
+ * (fog-affected) InstancedMeshes — cheap, deterministic, no shadows.
  */
 function buildForestBand(): ForestBand {
   const points = scatterAlongCourse(-FOREST_BAND_HALF_WIDTH, FOREST_BAND_HALF_WIDTH, FOREST_BAND_SPACING, SEED_FOREST)
-  const count = Math.max(1, points.length)
 
-  const geo = new THREE.ConeGeometry(1, 1, 7)
-  geo.translate(0, 0.5, 0) // base at local y=0, apex at y=1 → scale.y = world height
-  const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: true })
-  const mesh = new THREE.InstancedMesh(geo, mat, count)
-
+  // Split points into cone vs blob canopies deterministically (by hash).
+  const coneIndices: number[] = []
+  const blobIndices: number[] = []
   for (let i = 0; i < points.length; i++) {
+    const kindHash = sceneryHash(SEED_FOREST + i * 2.7 + 6.6)
+    if (kindHash < FOREST_BLOB_FRACTION) blobIndices.push(i)
+    else coneIndices.push(i)
+  }
+
+  // Fat, many-sided cone (softer than the old 7-sided spire) and a rounded blob.
+  // Both are unit shapes with their BASE at local y=0 and a unit height/diameter,
+  // so the per-instance (radius, height, radius) scale sets the world size and
+  // the base always rests on the band's baseline.
+  const coneGeo = new THREE.ConeGeometry(1, 1, FOREST_CONE_SEGMENTS)
+  coneGeo.translate(0, 0.5, 0) // base at y=0, apex at y=1
+  const blobGeo = new THREE.SphereGeometry(1, 10, 6)
+  blobGeo.translate(0, 1, 0) // base at y=0, top at y=2 (→ scale.y = height/2, below)
+
+  const coneMesh = fillForestMesh(coneGeo, points, coneIndices, false)
+  const blobMesh = fillForestMesh(blobGeo, points, blobIndices, true)
+
+  const group = new THREE.Group()
+  group.add(coneMesh, blobMesh)
+  group.position.set(0, FOREST_BASE_Y, FOREST_BAND_Z)
+
+  return { group, parallax: FOREST_BAND_PARALLAX, baseY: FOREST_BASE_Y }
+}
+
+/**
+ * Build one canopy InstancedMesh for the forest band: places every point in
+ * `indices` using its deterministic per-index hashes (height, radius, z-jitter,
+ * color). `isBlob` halves the y-scale so the y=0..2 blob geometry spans the same
+ * 0..height as the y=0..1 cone geometry. Shared by the cone + blob layers.
+ */
+function fillForestMesh(
+  geo: THREE.BufferGeometry,
+  points: ScatterPoint[],
+  indices: number[],
+  isBlob: boolean,
+): THREE.InstancedMesh {
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: true })
+  const mesh = new THREE.InstancedMesh(geo, mat, Math.max(1, indices.length))
+
+  for (let j = 0; j < indices.length; j++) {
+    const i = indices[j]
     const p = points[i]
     const heightHash = sceneryHash(SEED_FOREST + i * 5.1)
     const radiusHash = sceneryHash(SEED_FOREST + i * 7.3 + 0.9)
@@ -328,18 +383,17 @@ function buildForestBand(): ForestBand {
     const height = lerpRange(heightHash, FOREST_TREE_HEIGHT_MIN, FOREST_TREE_HEIGHT_MAX)
     const radius = lerpRange(radiusHash, FOREST_TREE_RADIUS_MIN, FOREST_TREE_RADIUS_MAX)
     const zJitter = lerpRange(zHash, -FOREST_Z_JITTER, FOREST_Z_JITTER)
+    const scaleY = isBlob ? height / 2 : height
 
-    mesh.setMatrixAt(i, matrixAt(p.x, 0, zJitter, radius, height, radius))
-    mesh.setColorAt(i, new THREE.Color(pickFromHash(colorHash, FOREST_COLORS)))
+    mesh.setMatrixAt(j, matrixAt(p.x, 0, zJitter, radius, scaleY, radius))
+    mesh.setColorAt(j, new THREE.Color(pickFromHash(colorHash, FOREST_COLORS)))
   }
 
   mesh.instanceMatrix.needsUpdate = true
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
   mesh.castShadow = false
   mesh.receiveShadow = false
-  mesh.position.set(0, FOREST_BASE_Y, FOREST_BAND_Z)
-
-  return { mesh, parallax: FOREST_BAND_PARALLAX, baseY: FOREST_BASE_Y }
+  return mesh
 }
 
 /**

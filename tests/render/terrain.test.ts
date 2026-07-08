@@ -7,7 +7,14 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { terrainColorAt, buildTerrainStrip } from '../../src/render/terrain'
+import {
+  terrainColorAt,
+  buildTerrainStrip,
+  groundBackdropExtent,
+  TERRAIN_FRONT_Z,
+  APRON_RUN,
+  APRON_DROP,
+} from '../../src/render/terrain'
 
 describe('terrainColorAt', () => {
   it('returns distinct colors for each zone', () => {
@@ -63,9 +70,9 @@ describe('buildTerrainStrip', () => {
       { x: 2, y: 1 },
     ]
     const { positions, colors } = buildTerrainStrip(pts)
-    // 4 verts per point × 3 floats each
-    expect(positions.length).toBe(pts.length * 4 * 3)
-    expect(colors.length).toBe(pts.length * 4 * 3)
+    // 5 verts per point (top-front/back, bot-front/back, apron-near) × 3 floats
+    expect(positions.length).toBe(pts.length * 5 * 3)
+    expect(colors.length).toBe(pts.length * 5 * 3)
   })
 
   it('produces correct index count for n points', () => {
@@ -76,8 +83,8 @@ describe('buildTerrainStrip', () => {
       { x: 3, y: 2 },
     ]
     const { indices } = buildTerrainStrip(pts)
-    // (n-1) segments × 12 indices each (2 quads, 2 tris per quad, 3 verts per tri)
-    expect(indices.length).toBe((pts.length - 1) * 12)
+    // (n-1) segments × 18 indices each (3 quads: top + wall + apron, 6 each)
+    expect(indices.length).toBe((pts.length - 1) * 18)
   })
 
   it('first top-front vertex maps x,y directly from ground point', () => {
@@ -93,6 +100,21 @@ describe('buildTerrainStrip', () => {
     expect(positions[2]).toBeGreaterThan(0)
   })
 
+  it('apron-near vertex slopes down and toward the camera from the front edge', () => {
+    const pts = [
+      { x: 5, y: 3 },
+      { x: 10, y: 7 },
+    ]
+    const { positions } = buildTerrainStrip(pts)
+    // Vertex 4 of the first point = apron-near: same x, dropped in y, pushed +z.
+    const base = 4 * 3
+    expect(positions[base + 0]).toBe(5) // same x as the front edge
+    expect(positions[base + 1]).toBe(3 - APRON_DROP) // dropped below the surface
+    expect(positions[base + 2]).toBeCloseTo(TERRAIN_FRONT_Z + APRON_RUN) // toward camera
+    // The apron never rises above the road surface (occlusion safety).
+    expect(positions[base + 1]).toBeLessThan(3)
+  })
+
   it('all index values are within vertex range', () => {
     const pts = Array.from({ length: 10 }, (_, i) => ({ x: i, y: 0 }))
     const { positions, indices } = buildTerrainStrip(pts)
@@ -101,5 +123,28 @@ describe('buildTerrainStrip', () => {
       expect(idx).toBeGreaterThanOrEqual(0)
       expect(idx).toBeLessThanOrEqual(maxVert)
     }
+  })
+})
+
+describe('groundBackdropExtent', () => {
+  it('centers on the course and extends well beyond it in x', () => {
+    const { width, centerX } = groundBackdropExtent(0, 230)
+    expect(centerX).toBe(115)
+    // Spans the whole course plus a generous margin each side.
+    expect(width).toBeGreaterThan(230)
+    // Half-width reaches far past both ends.
+    expect(centerX - width / 2).toBeLessThan(0)
+    expect(centerX + width / 2).toBeGreaterThan(230)
+  })
+
+  it('produces a positive depth reaching back from the road edge into the distance', () => {
+    const { depth, centerZ } = groundBackdropExtent(0, 100)
+    expect(depth).toBeGreaterThan(0)
+    // Center sits behind the road (negative z) — the plane recedes into -z.
+    expect(centerZ).toBeLessThan(0)
+  })
+
+  it('is deterministic for the same course bounds', () => {
+    expect(groundBackdropExtent(10, 500)).toEqual(groundBackdropExtent(10, 500))
   })
 })

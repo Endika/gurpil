@@ -35,7 +35,7 @@ import type { Course } from '../core/course'
 import type { Vehicle } from '../physics/vehicle'
 import { SHAPES } from '../core/shapes'
 import type { ShapeId } from '../core/shapes'
-import { buildTerrainMesh, buildObstacleMeshes, TERRAIN_FRONT_Z } from './terrain'
+import { buildTerrainMesh, buildObstacleMeshes, buildGroundBackdrop, TERRAIN_FRONT_Z } from './terrain'
 import { wheelGeometry, wheelGeometryBounds, WHEEL_VISUAL_RADIUS } from './wheelMesh'
 import { buildScenery } from './scenery'
 
@@ -648,6 +648,14 @@ export function createScene(course: Course): Scene3D {
   camPos.copy(CAM_VIEW_DIR).multiplyScalar(camDist).add(camTarget)
   camera.position.copy(camPos)
   camera.lookAt(camTarget)
+
+  // ── Ground backdrop ────────────────────────────────────────────────────────
+  // A large continuous floor behind + below the road, out to the hills, so the
+  // road never reads as a strip floating over a void and the roadside scenery
+  // sits on real ground. Fully behind (z ≤ road back edge) and below the play
+  // plane, so it never occludes the vehicle/track (see terrain.ts).
+  const groundBackdrop = buildGroundBackdrop(course)
+  scene.add(groundBackdrop)
 
   // ── Terrain ──────────────────────────────────────────────────────────────────
   const terrainMesh = buildTerrainMesh(course)

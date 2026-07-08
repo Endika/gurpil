@@ -89,6 +89,60 @@ export const TERRAIN_FRONT_Z = 0.05
 /** z of the terrain strip's BACK face (extruded away from the camera). */
 const TERRAIN_BACK_Z = TERRAIN_FRONT_Z - TERRAIN_DEPTH
 
+// ─── Foreground apron ─────────────────────────────────────────────────────────
+
+/**
+ * The road's front edge used to present a single sheer wall dropping straight
+ * down (TERRAIN_WALL_DEPTH) — reading as a CLIFF/PRECIPICE right under the car
+ * at this 3/4 camera. We now skin the front with a gentle grassy APRON that
+ * slopes from the front-top edge DOWN and TOWARD the camera (+z), so the near
+ * edge reads as a planted bank, not a ledge over a void. The old vertical wall
+ * is kept purely to close the geometry underneath — the apron occludes it from
+ * every on-screen angle.
+ *
+ * Occlusion safety: the apron's HIGHEST point is the road's own front-top edge
+ * (at ground level, world z = ROAD_FRONT_MARGIN); every other apron vertex is
+ * BELOW that and further toward the camera. At the camera's fixed, near-side-on
+ * 3/4 angle (slight downward pitch) the line of sight to the wheel/egg ground
+ * contact (at z=0) passes ABOVE the entire apron, so the apron never occludes
+ * the wheels, chassis, rider or egg obstacles — exactly like the old front-top
+ * edge it replaces, which already grazed just above the wheel-contact sightline.
+ */
+/** How far the apron reaches toward the camera (+z) from the front edge (m). */
+export const APRON_RUN = 2.5
+/** How far the apron's near edge drops below the front-top edge (m). */
+export const APRON_DROP = 3
+/** Apron-near vertices are darkened vs the zone color → a shaded-bank gradient
+ *  that gives the slope depth instead of a flat card. */
+const APRON_DARKEN = 0.72
+
+// ─── Ground backdrop ──────────────────────────────────────────────────────────
+
+/**
+ * A large, continuous ground plane filling the space BEHIND and BELOW the road
+ * out to the parallax hills, so the world has a real floor: the road no longer
+ * reads as a strip floating over a void, and the roadside forest/scenery reads
+ * as planted on ground rather than marching off to infinity. It sits just below
+ * the road surface and starts at the road's back edge, extending far back in z
+ * (past the distant forest band) and well beyond the course in x; fog fades its
+ * far reaches into the horizon exactly like the hills. Being behind (z ≤ road
+ * back edge) and below the play plane, it never occludes the vehicle/track.
+ */
+const GROUND_BACKDROP_Y = -0.25
+/** Front edge (world z) — meets the road strip's back edge (ROAD_BACK_EDGE_Z in
+ *  scenery.ts / TERRAIN back edge) so there's no gap behind the road. */
+const GROUND_BACKDROP_FRONT_Z = -3.5
+/** Back edge (world z) — past the distant forest band (~-125) and hills so it
+ *  always underlies them; its far reach is fully fogged before it ends. */
+const GROUND_BACKDROP_BACK_Z = -170
+/** How far the plane extends past startX / finishX (m) — comfortably beyond the
+ *  frustum's width at the far ground depth for any aspect, so the course
+ *  start/finish never reveal a bare edge. */
+const GROUND_BACKDROP_X_MARGIN = 260
+/** Muted terrain green — reads as continuous land, fades to fog with distance. */
+const GROUND_BACKDROP_COLOR = 0x6ba368
+const GROUND_BACKDROP_ROUGHNESS = 1
+
 // ─── Terrain color zones ──────────────────────────────────────────────────────
 
 /**
@@ -135,28 +189,31 @@ export function buildTerrainStrip(ground: Point[]): {
   const zFront = TERRAIN_FRONT_Z
   const zBack = TERRAIN_BACK_Z
   const wallBottom = -TERRAIN_WALL_DEPTH
+  const zApron = zFront + APRON_RUN
 
-  // Per segment (n-1 quads), we emit 4 vertices (front-top, back-top, front-bottom, back-bottom)
-  // for the top+wall combined face. Actually let's use a simpler approach:
-  // For n points we have:
-  //   - 2 verts per point on the top edge (front and back at z=zFront/zBack)
-  //   - 2 verts per point on the bottom edge (front and back at y=wallBottom)
-  // Total: 4*n verts; (n-1)*4 quads → (n-1)*8 triangles → (n-1)*8*3 indices
+  // Per point i we emit 5 vertices:
+  //   - top edge:  front (zFront) + back (zBack), at y = ground y
+  //   - bottom edge: front + back, at y = wallBottom (closes the strip underside)
+  //   - apron near: (y - APRON_DROP) at zApron — the foreground grass bank
+  // Total: 5*n verts. Each segment (n-1) emits 3 quads (top, front wall, apron)
+  // → 3 quads × 2 tris × 3 verts = 18 indices per segment.
 
-  const vertCount = 4 * n
+  const vertsPerPoint = 5
+  const vertCount = vertsPerPoint * n
   const positions = new Float32Array(vertCount * 3)
   const colors = new Float32Array(vertCount * 3)
-  const indices = new Uint32Array((n - 1) * 12) // 2 quads (top + front wall) × 2 tris × 3 verts = 12 per segment
+  const indices = new Uint32Array((n - 1) * 18)
 
   // Layout per point i:
-  //   vIdx 4i+0: top-front (x, y, zFront)
-  //   vIdx 4i+1: top-back  (x, y, zBack)
-  //   vIdx 4i+2: bot-front (x, wallBottom, zFront)
-  //   vIdx 4i+3: bot-back  (x, wallBottom, zBack)
+  //   vIdx 5i+0: top-front   (x, y, zFront)
+  //   vIdx 5i+1: top-back    (x, y, zBack)
+  //   vIdx 5i+2: bot-front   (x, wallBottom, zFront)
+  //   vIdx 5i+3: bot-back    (x, wallBottom, zBack)
+  //   vIdx 5i+4: apron-near  (x, y - APRON_DROP, zApron)
 
   for (let i = 0; i < n; i++) {
     const { x, y } = ground[i]
-    const vi = i * 4
+    const vi = i * vertsPerPoint
     const pi = vi * 3
 
     // top-front
@@ -175,34 +232,37 @@ export function buildTerrainStrip(ground: Point[]): {
     positions[pi + 9] = x
     positions[pi + 10] = wallBottom
     positions[pi + 11] = zBack
+    // apron-near (toward the camera and down)
+    positions[pi + 12] = x
+    positions[pi + 13] = y - APRON_DROP
+    positions[pi + 14] = zApron
 
     const col = new THREE.Color(terrainColorAt(x))
-    // Same color for all 4 verts at this x
+    // Top + wall verts (0..3) take the zone color; the apron-near vert (4) is
+    // darkened so the bank shades into depth rather than reading as a flat card.
     for (let k = 0; k < 4; k++) {
       colors[(vi + k) * 3 + 0] = col.r
       colors[(vi + k) * 3 + 1] = col.g
       colors[(vi + k) * 3 + 2] = col.b
     }
+    colors[(vi + 4) * 3 + 0] = col.r * APRON_DARKEN
+    colors[(vi + 4) * 3 + 1] = col.g * APRON_DARKEN
+    colors[(vi + 4) * 3 + 2] = col.b * APRON_DARKEN
   }
 
-  // Indices: for each pair (i, i+1), emit quads:
-  //   Top face:   (4i+0, 4i+1, 4(i+1)+0) + (4i+1, 4(i+1)+1, 4(i+1)+0)
-  //   Front wall: (4i+0, 4i+2, 4(i+1)+0) + (4i+2, 4(i+1)+2, 4(i+1)+0)
-  //   Back wall:  (4i+1, 4(i+1)+1, 4i+3) + (4(i+1)+1, 4(i+1)+3, 4i+3) (winding reversed)
-  //   Bottom face (optional, skip for perf)
-
+  // Indices: for each pair (i, i+1) emit the top, front-wall and apron quads.
   let idx = 0
   for (let i = 0; i < n - 1; i++) {
-    const a = i * 4
-    const b = (i + 1) * 4
+    const a = i * vertsPerPoint
+    const b = (i + 1) * vertsPerPoint
     const tf = a // top-front a
     const tb = a + 1 // top-back a
     const bf = a + 2 // bot-front a
-    // const bb = a + 3 // bot-back a (unused winding)
+    const af = a + 4 // apron-near a
     const ntf = b // top-front b
     const ntb = b + 1 // top-back b
     const nbf = b + 2 // bot-front b
-    // const nbb = b + 3 // bot-back b (unused winding)
+    const naf = b + 4 // apron-near b
 
     // Top face (CCW from above: +z = front)
     indices[idx++] = tf
@@ -212,12 +272,20 @@ export function buildTerrainStrip(ground: Point[]): {
     indices[idx++] = ntb
     indices[idx++] = tb
 
-    // Front wall face (CCW from front: +z = viewer)
+    // Front wall face (kept to close the underside; occluded by the apron)
     indices[idx++] = tf
     indices[idx++] = bf
     indices[idx++] = nbf
     indices[idx++] = tf
     indices[idx++] = nbf
+    indices[idx++] = ntf
+
+    // Apron face (front-top edge → apron-near edge; normals face up + toward camera)
+    indices[idx++] = tf
+    indices[idx++] = af
+    indices[idx++] = naf
+    indices[idx++] = tf
+    indices[idx++] = naf
     indices[idx++] = ntf
   }
 
@@ -313,6 +381,49 @@ export function buildTerrainMesh(course: Course): THREE.Mesh {
   })
 
   return new THREE.Mesh(geo, mat)
+}
+
+/**
+ * Extent of the ground backdrop plane in world space, derived from the course's
+ * x range. Pure (no Three.js) so the placement math is unit-testable:
+ *   - width / centerX: span the course plus GROUND_BACKDROP_X_MARGIN each side
+ *   - depth  / centerZ: from the road's back edge far back past the hills
+ */
+export function groundBackdropExtent(
+  startX: number,
+  finishX: number,
+): { width: number; centerX: number; depth: number; centerZ: number } {
+  const width = finishX - startX + 2 * GROUND_BACKDROP_X_MARGIN
+  const centerX = (startX + finishX) / 2
+  const depth = GROUND_BACKDROP_FRONT_Z - GROUND_BACKDROP_BACK_Z
+  const centerZ = (GROUND_BACKDROP_FRONT_Z + GROUND_BACKDROP_BACK_Z) / 2
+  return { width, centerX, depth, centerZ }
+}
+
+/**
+ * Build the large continuous ground plane that floors the world behind and
+ * below the road (see the GROUND_BACKDROP_* doc block above). A single flat,
+ * fog-affected quad — cheap — colored a muted terrain green so it fades into
+ * the horizon fog just like the parallax hills. Positioned fully in world space
+ * (front edge at the road's back edge, well below the road surface); the caller
+ * just adds it to the scene.
+ */
+export function buildGroundBackdrop(course: Course): THREE.Mesh {
+  const { width, centerX, depth, centerZ } = groundBackdropExtent(course.startX, course.finishX)
+
+  const geo = new THREE.PlaneGeometry(width, depth)
+  geo.rotateX(-Math.PI / 2) // lie flat in the xz-plane, normal facing +y
+
+  const mat = new THREE.MeshStandardMaterial({
+    color: GROUND_BACKDROP_COLOR,
+    roughness: GROUND_BACKDROP_ROUGHNESS,
+    metalness: 0,
+  })
+
+  const mesh = new THREE.Mesh(geo, mat)
+  mesh.position.set(centerX, GROUND_BACKDROP_Y, centerZ)
+  mesh.receiveShadow = true
+  return mesh
 }
 
 /**
