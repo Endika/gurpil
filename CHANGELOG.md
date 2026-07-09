@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.9.0](https://github.com/Endika/gurpil/compare/v0.8.1...v0.9.0) (2026-07-09)
+
+
+### Features
+
+* **audio:** comedic off-the-edge fall scream at the finish ([ec59898](https://github.com/Endika/gurpil/commit/ec59898ee717ef7fa608ad41258d28d1711c2abb))
+
+
+### Chores
+
+* bump @dimforge/rapier2d-compat from 0.14.0 to 0.19.3 ([#11](https://github.com/Endika/gurpil/issues/11)) ([18c771a](https://github.com/Endika/gurpil/commit/18c771aac85203a21cfd475291d1ae814dc805d8))
+* bump eslint from 9.39.4 to 10.6.0 ([#15](https://github.com/Endika/gurpil/issues/15)) ([214cd61](https://github.com/Endika/gurpil/commit/214cd61232f62ff22b63d42fd1b7f87ac86864d8))
+* bump three and @types/three ([#16](https://github.com/Endika/gurpil/issues/16)) ([887d8e8](https://github.com/Endika/gurpil/commit/887d8e8e807582025c09ebd2c1628df7f4d07fb6))
+* bump typescript from 5.9.3 to 7.0.2 ([#12](https://github.com/Endika/gurpil/issues/12)) ([80a9b28](https://github.com/Endika/gurpil/commit/80a9b28ce2f6368ab3d7bf2b2a400859f68bc121))
+* bump vite from 6.4.3 to 8.1.4 ([#14](https://github.com/Endika/gurpil/issues/14)) ([4ed8825](https://github.com/Endika/gurpil/commit/4ed88253fd723ec47c786df305537566f58c1545))
+* bump vitest from 3.2.7 to 4.1.10 ([#13](https://github.com/Endika/gurpil/issues/13)) ([bec1b56](https://github.com/Endika/gurpil/commit/bec1b56a11e0182521af81cff511107b78739a86))
+
 ## [0.8.1](https://github.com/Endika/gurpil/compare/v0.8.0...v0.8.1) (2026-07-08)
 
 
