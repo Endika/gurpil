@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/Endika/gurpil/compare/v0.9.0...v0.9.1) (2026-07-09)
+
+
+### Bug Fixes
+
+* **deps:** pin back incompatible major bumps to restore the build ([8c8d822](https://github.com/Endika/gurpil/commit/8c8d82212bb735eaa6be525b6ef12abee13811d4))
+
 ## [0.9.0](https://github.com/Endika/gurpil/compare/v0.8.1...v0.9.0) (2026-07-09)
 
 
