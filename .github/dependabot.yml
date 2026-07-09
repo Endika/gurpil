@@ -7,6 +7,11 @@ updates:
     open-pull-requests-limit: 10
     commit-message:
       prefix: chore
+    # Major bumps have broken the build (eslint 10 / ts 7 / vite 8 / rapier 0.19);
+    # only patch & minor are proposed — do majors manually when ready.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
