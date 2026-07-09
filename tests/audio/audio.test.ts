@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { engineFreq, engineGain, finishNotes } from '../../src/audio/audio'
+import { engineFreq, engineGain, finishNotes, fallScreamFreqHz } from '../../src/audio/audio'
 
 describe('engineFreq', () => {
   it('is at its base value at a standstill', () => {
@@ -66,5 +66,27 @@ describe('finishNotes', () => {
     for (const medal of ['gold', 'silver', 'bronze', 'none'] as const) {
       expect(finishNotes(medal).length).toBeGreaterThan(0)
     }
+  })
+})
+
+describe('fallScreamFreqHz', () => {
+  it('starts high and ends low, sweeping down over its duration', () => {
+    const start = fallScreamFreqHz(0)
+    const end = fallScreamFreqHz(1.0)
+    expect(start).toBeCloseTo(1100, 5)
+    expect(end).toBeCloseTo(160, 5)
+    expect(start).toBeGreaterThan(end)
+  })
+
+  it('is monotonically non-increasing over the sweep', () => {
+    const samples = [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0]
+    for (let i = 1; i < samples.length; i++) {
+      expect(fallScreamFreqHz(samples[i])).toBeLessThanOrEqual(fallScreamFreqHz(samples[i - 1]))
+    }
+  })
+
+  it('clamps out-of-range input to the sweep endpoints', () => {
+    expect(fallScreamFreqHz(-1)).toBe(fallScreamFreqHz(0))
+    expect(fallScreamFreqHz(5)).toBe(fallScreamFreqHz(1.0))
   })
 })

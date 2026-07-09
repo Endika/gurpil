@@ -93,6 +93,42 @@ const FINISH_NOTES: Record<Medal, readonly number[]> = {
   none: [NOTE_A3, NOTE_G3],
 }
 
+// ─── Off-the-edge fall scream (finish-line gag) ────────────────────────────
+//
+// After crossing the finish line the car keeps rolling and drives off the end
+// of the track — there is no ground beyond `course.finishX` (see
+// src/game/game.ts's post-finish coda). This is the comedic cartoon "falling
+// scream" that plays once it tips over the edge: an ORIGINAL synthesized
+// voice — no recorded/sampled audio, matching every other sound in this file.
+
+/** Oscillator type for the scream's "voice" — a sawtooth reads as more vocal/
+ *  buzzy than the sine/triangle used for the calmer cues above. */
+const FALL_SCREAM_OSCILLATOR_TYPE: OscillatorType = 'sawtooth'
+
+/** Total scream duration (seconds) — short and comedic. */
+const FALL_SCREAM_DURATION_SECONDS = 1.0
+
+/** Starting pitch (Hz) — a high, startled yelp. */
+const FALL_SCREAM_START_FREQ_HZ = 1100
+
+/** Ending pitch (Hz) — the pitch has swept all the way down by the time the
+ *  scream fades out, cartoon-falling style. */
+const FALL_SCREAM_END_FREQ_HZ = 160
+
+/** Vibrato (wobble) rate (Hz) layered on top of the downward sweep — the
+ *  wavering "waaaAAAaaa" that sells the comedic falling voice. */
+const FALL_SCREAM_VIBRATO_RATE_HZ = 24
+
+/** Vibrato depth (Hz) — how far the wobble swings the pitch each cycle. */
+const FALL_SCREAM_VIBRATO_DEPTH_HZ = 70
+
+/** Peak loudness — in line with the other one-shot cues (BLIP_GAIN/FINISH_GAIN). */
+const FALL_SCREAM_GAIN = 0.09
+
+/** Fade-in time (seconds) — snappier than TONE_ATTACK_SECONDS since a scream
+ *  should start abruptly, not fade in gently. */
+const FALL_SCREAM_ATTACK_SECONDS = 0.015
+
 // ─── One-shot tone envelope ─────────────────────────────────────────────────
 
 /** Fade-in time for one-shot tones (blip/jingle notes) — avoids a click. */
@@ -137,6 +173,20 @@ export function engineGain(speedFraction: number): number {
 /** The arpeggio (note frequencies, Hz) played for a given medal. Pure. */
 export function finishNotes(medal: Medal): readonly number[] {
   return FINISH_NOTES[medal]
+}
+
+/**
+ * Pitch (Hz) of the fall scream's downward sweep at `elapsedSeconds` since it
+ * started. Mirrors the geometric (exponential) interpolation used by
+ * `exponentialRampToValueAtTime` in the real playback, so it's a faithful,
+ * unit-testable model of the "spine" of the sweep — the vibrato layered on
+ * top during actual playback is a separate wobble and isn't modeled here.
+ * Clamps out-of-range input. Pure — no AudioContext needed.
+ */
+export function fallScreamFreqHz(elapsedSeconds: number): number {
+  const t = Math.min(Math.max(elapsedSeconds, 0), FALL_SCREAM_DURATION_SECONDS)
+  const progress = t / FALL_SCREAM_DURATION_SECONDS
+  return FALL_SCREAM_START_FREQ_HZ * (FALL_SCREAM_END_FREQ_HZ / FALL_SCREAM_START_FREQ_HZ) ** progress
 }
 
 // ─── Mute persistence (storage-agnostic, never throws) ─────────────────────
@@ -185,6 +235,9 @@ export interface Audio {
   blip(): void
   /** Play a short arpeggio jingle graded by the earned medal. */
   finish(medal: Medal): void
+  /** Play the comedic cartoon "falling scream" once the car tumbles off the
+   *  end of the track after the finish line (see src/game/game.ts). */
+  fallScream(): void
   /** Mute/unmute all output; persists the choice. */
   setMuted(muted: boolean): void
   /** Whether audio is currently muted. */
@@ -225,6 +278,49 @@ function playTone(
   gain.connect(context.destination)
   osc.start(startAt)
   osc.stop(startAt + durationSeconds + TONE_RELEASE_TAIL_SECONDS)
+}
+
+/**
+ * Play the comedic off-the-edge fall scream on `context`: a sawtooth voice
+ * sweeping down in pitch (see `fallScreamFreqHz`) with a wobbling vibrato
+ * layered on top, and a soft attack/decay envelope. Self-contained — creates
+ * and tears down its own oscillator/gain/LFO nodes.
+ */
+function playFallScream(context: AudioContext): void {
+  const startAt = context.currentTime
+
+  const osc = context.createOscillator()
+  osc.type = FALL_SCREAM_OSCILLATOR_TYPE
+  osc.frequency.setValueAtTime(FALL_SCREAM_START_FREQ_HZ, startAt)
+  osc.frequency.exponentialRampToValueAtTime(
+    FALL_SCREAM_END_FREQ_HZ,
+    startAt + FALL_SCREAM_DURATION_SECONDS,
+  )
+
+  // Vibrato LFO: a slow sine wobbling the oscillator's pitch, for the
+  // comedic wavering cartoon-scream quality.
+  const vibrato = context.createOscillator()
+  vibrato.type = 'sine'
+  vibrato.frequency.value = FALL_SCREAM_VIBRATO_RATE_HZ
+  const vibratoGain = context.createGain()
+  vibratoGain.gain.value = FALL_SCREAM_VIBRATO_DEPTH_HZ
+  vibrato.connect(vibratoGain)
+  vibratoGain.connect(osc.frequency)
+  vibrato.start(startAt)
+  vibrato.stop(startAt + FALL_SCREAM_DURATION_SECONDS + TONE_RELEASE_TAIL_SECONDS)
+
+  const gain = context.createGain()
+  gain.gain.setValueAtTime(0, startAt)
+  gain.gain.linearRampToValueAtTime(FALL_SCREAM_GAIN, startAt + FALL_SCREAM_ATTACK_SECONDS)
+  gain.gain.exponentialRampToValueAtTime(
+    TONE_RELEASE_FLOOR,
+    startAt + FALL_SCREAM_DURATION_SECONDS,
+  )
+
+  osc.connect(gain)
+  gain.connect(context.destination)
+  osc.start(startAt)
+  osc.stop(startAt + FALL_SCREAM_DURATION_SECONDS + TONE_RELEASE_TAIL_SECONDS)
 }
 
 /**
@@ -328,6 +424,10 @@ export function createAudio(): Audio {
           startOffset,
         )
       })
+    },
+    fallScream(): void {
+      if (muted || ctx === null) return
+      playFallScream(ctx)
     },
     setMuted(nextMuted: boolean): void {
       muted = nextMuted

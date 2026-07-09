@@ -75,6 +75,41 @@ const SETTLE_STEPS = 90
 /** Medal whose short "no medal" jingle doubles as the endless time-up cue. */
 const ENDLESS_OVER_SOUND: Medal = 'none'
 
+// ─── Post-finish "off-the-edge" gag (campaign only) ────────────────────────
+//
+// The medal/time are locked in the instant the run reaches 'finished' (see
+// core/run.ts's tickRun) — everything below is a purely presentational coda
+// layered on top: the car keeps rolling past the finish line, drives off the
+// end of the track (there is no ground beyond `course.finishX` — see the flat
+// run-out in core/course.ts) and tumbles off, and only once that fall lands
+// (or a short timeout elapses) does the finish overlay appear.
+
+/** How long (ms) after the finish-line crossing we keep the throttle applied
+ *  before cutting it — long enough for the car to visibly drive off the end
+ *  of the track instead of stopping right at the line. */
+const POST_FINISH_ROLL_MS = 900
+
+/** Chassis y below which the vehicle is considered to have fallen off the end
+ *  of the track — well under the flat run-out's ground level (`BASE_Y = 0` in
+ *  core/course.ts), so ordinary driving never crosses it; only actually going
+ *  over the edge does. */
+const FALL_THROUGH_Y = -6
+
+/** Safety cap (ms), counted from the finish-line crossing, on how long we
+ *  wait for the off-the-edge fall before revealing the finish overlay
+ *  unconditionally — guarantees the results screen always appears even if
+ *  the car somehow never goes over the edge. */
+const POST_FINISH_FALL_TIMEOUT_MS = 4000
+
+/**
+ * True once the chassis has dropped below `thresholdY` — i.e. it has gone
+ * over the edge of the track with no ground beneath it. Pure — exported for
+ * unit tests (no AudioContext/physics-world needed).
+ */
+export function hasFallenOffEdge(chassisY: number, thresholdY: number): boolean {
+  return chassisY < thresholdY
+}
+
 /** A fresh, random seed for an endless run (a uint32). Non-deterministic on
  *  purpose — each endless run rolls a new track + theme. */
 function randomEndlessSeed(): number {
@@ -211,6 +246,13 @@ async function runLevel(
   // first frame the run reaches 'finished' — not every frame afterwards.
   let finishResult: { medal: Medal; best: BestRecord } | null = null
 
+  // Post-finish "off-the-edge" coda bookkeeping (see constants above): time
+  // since the finish-line crossing, whether the fall scream has fired, and
+  // whether the finish overlay has been revealed yet.
+  let msSinceFinish = 0
+  let fallScreamPlayed = false
+  let revealOverlay = false
+
   // ── Draw-box ──────────────────────────────────────────────────────────────
   const drawBox = createDrawBox((id) => {
     // The first draw is the first reliable user gesture in the race flow —
@@ -248,8 +290,15 @@ async function runLevel(
         vehicle.setThrottle(1)
         vehicle.applyDrive()
       } else if (run.phase === 'finished') {
-        // Cut throttle once finished so the car rolls to a halt.
-        vehicle.setThrottle(0)
+        // Post-finish coda: keep driving for a moment so the car visibly
+        // rolls off the end of the track (see POST_FINISH_ROLL_MS) instead
+        // of hard-stopping right at the line, then cut power.
+        if (msSinceFinish < POST_FINISH_ROLL_MS) {
+          vehicle.setThrottle(1)
+          vehicle.applyDrive()
+        } else {
+          vehicle.setThrottle(0)
+        }
       }
 
       // Self-right / anti-stuck assist runs every step (all phases) so the car
@@ -264,6 +313,23 @@ async function runLevel(
     if (acc.steps > 0) {
       const steppedMs = acc.steps * STEP_MS
       run = tickRun(run, steppedMs, vehicle.position().x, course.finishX)
+    }
+
+    // Post-finish coda: track time since the finish, detect the off-the-edge
+    // fall, and gate the overlay reveal so the scream lands before the
+    // results screen. Purely cosmetic — run.elapsedMs/finishResult (below)
+    // are already locked in by tickRun's finish transition above.
+    if (run.phase === 'finished') {
+      msSinceFinish += frameMs
+
+      if (!fallScreamPlayed && hasFallenOffEdge(vehicle.position().y, FALL_THROUGH_Y)) {
+        fallScreamPlayed = true
+        audio.fallScream()
+      }
+
+      if (!revealOverlay && (fallScreamPlayed || msSinceFinish >= POST_FINISH_FALL_TIMEOUT_MS)) {
+        revealOverlay = true
+      }
     }
 
     // ── HUD update ───────────────────────────────────────────────────────
@@ -288,13 +354,21 @@ async function runLevel(
           scene.medalCelebration(medal, pos.x, pos.y)
         }
       }
-      hud.showFinish({
-        elapsedMs: run.elapsedMs,
-        medal: finishResult.medal,
-        best: finishResult.best,
-        hasNextLevel,
-      })
-      audio.setEngine(0)
+      if (revealOverlay) {
+        hud.showFinish({
+          elapsedMs: run.elapsedMs,
+          medal: finishResult.medal,
+          best: finishResult.best,
+          hasNextLevel,
+        })
+        audio.setEngine(0)
+      } else {
+        // Post-finish coda: keep the gameplay view (and engine sound) up
+        // while the car rolls off the end of the track toward its comedic
+        // fall — see the coda bookkeeping above.
+        hud.hide()
+        audio.setEngine(speedFraction(speedMps))
+      }
     }
 
     // ── Render ───────────────────────────────────────────────────────────
