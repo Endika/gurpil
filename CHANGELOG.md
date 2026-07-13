@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.2](https://github.com/Endika/gurpil/compare/v0.9.1...v0.9.2) (2026-07-13)
+
+
+### Chores
+
+* bump dependabot/fetch-metadata from 2 to 3 in the actions group ([1354bfb](https://github.com/Endika/gurpil/commit/1354bfb8004594a4fa0419b6172d95531aab377c))
+
 ## [0.9.1](https://github.com/Endika/gurpil/compare/v0.9.0...v0.9.1) (2026-07-09)
 
 
