@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.3](https://github.com/Endika/gurpil/compare/v0.9.2...v0.9.3) (2026-07-13)
+
+
+### Bug Fixes
+
+* prevent accidental pinch and double-tap zoom on mobile ([13d336c](https://github.com/Endika/gurpil/commit/13d336cd3544454c61c9f0620de818a9a65a23e3))
+
 ## [0.9.2](https://github.com/Endika/gurpil/compare/v0.9.1...v0.9.2) (2026-07-13)
 
 
