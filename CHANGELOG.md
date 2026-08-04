@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.9](https://github.com/Endika/gurpil/compare/v0.9.8...v0.9.9) (2026-08-04)
+
+
+### Chores
+
+* bump vite from 6.4.3 to 8.2.0 ([#39](https://github.com/Endika/gurpil/issues/39)) ([566fa9d](https://github.com/Endika/gurpil/commit/566fa9dac563c42c19305afd41b34c9a53269d48))
+
 ## [0.9.8](https://github.com/Endika/gurpil/compare/v0.9.7...v0.9.8) (2026-08-04)
 
 
