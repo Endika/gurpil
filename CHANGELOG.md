@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.9.5](https://github.com/Endika/gurpil/compare/v0.9.4...v0.9.5) (2026-08-04)
+
+
+### Chores
+
+* bump @typescript-eslint/eslint-plugin from 8.64.0 to 8.65.0 ([#32](https://github.com/Endika/gurpil/issues/32)) ([9c0a0f0](https://github.com/Endika/gurpil/commit/9c0a0f01ad66fc008cb90da1a339b1b0f6084fd1))
+* bump @typescript-eslint/parser from 8.64.0 to 8.65.0 ([#31](https://github.com/Endika/gurpil/issues/31)) ([b1a3e50](https://github.com/Endika/gurpil/commit/b1a3e50a3087de315adc7a116c530ff096160e5a))
+* bump fast-uri from 3.1.3 to 3.1.5 ([#33](https://github.com/Endika/gurpil/issues/33)) ([b8bef18](https://github.com/Endika/gurpil/commit/b8bef1869a1ab0bb89f8c9192b137c3c2f36e42a))
+
 ## [0.9.4](https://github.com/Endika/gurpil/compare/v0.9.3...v0.9.4) (2026-07-16)
 
 
