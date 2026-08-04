@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.9.6](https://github.com/Endika/gurpil/compare/v0.9.5...v0.9.6) (2026-08-04)
+
+
+### Chores
+
+* bump @types/three from 0.185.1 to 0.185.3 ([#40](https://github.com/Endika/gurpil/issues/40)) ([a2463c6](https://github.com/Endika/gurpil/commit/a2463c65b08f195c73e38f1270280d88fb2fca1d))
+* bump brace-expansion from 1.1.15 to 1.1.18 ([#35](https://github.com/Endika/gurpil/issues/35)) ([7dbe981](https://github.com/Endika/gurpil/commit/7dbe981e5ef68d1ee9972c68a586018999be3356))
+* bump postcss from 8.5.16 to 8.5.25 ([#34](https://github.com/Endika/gurpil/issues/34)) ([81baffe](https://github.com/Endika/gurpil/commit/81baffe0adfceca3b48e72e07683ed8e07b34b64))
+
 ## [0.9.5](https://github.com/Endika/gurpil/compare/v0.9.4...v0.9.5) (2026-08-04)
 
 
