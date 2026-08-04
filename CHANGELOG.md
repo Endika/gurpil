@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.8](https://github.com/Endika/gurpil/compare/v0.9.7...v0.9.8) (2026-08-04)
+
+
+### Chores
+
+* bump eslint from 9.39.5 to 10.8.0 ([#41](https://github.com/Endika/gurpil/issues/41)) ([58cfe70](https://github.com/Endika/gurpil/commit/58cfe70d2b3aecdf374e75bdb661c8bbdbaea206))
+
 ## [0.9.7](https://github.com/Endika/gurpil/compare/v0.9.6...v0.9.7) (2026-08-04)
 
 
