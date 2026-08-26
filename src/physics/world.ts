@@ -29,6 +29,12 @@ export const PHYSICS_TIMESTEP = 1 / 60
 /** Radius of egg obstacle ball colliders (metres). */
 export const EGG_RADIUS = 0.5
 
+/** Contact penetration the solver tolerates, in metres. */
+const ALLOWED_LINEAR_ERROR = 0.001
+
+/** Distance at which contacts start being predicted, in metres. */
+const PREDICTION_DISTANCE = 0.002
+
 // ─── Public types ─────────────────────────────────────────────────────────────
 
 export interface PhysicsWorld {
@@ -50,6 +56,13 @@ export async function createWorld(course: Course): Promise<PhysicsWorld> {
 
   const world = new RAPIER.World(GRAVITY)
   world.timestep = PHYSICS_TIMESTEP
+
+  // The shape gates and the generator's completability ceilings were tuned against
+  // these two contact tolerances, so they are pinned rather than inherited: rapier
+  // 0.20 raised the defaults to 0.005 and 0.02, which moves which tracks the ideal
+  // shape sequence can clear.
+  world.integrationParameters.normalizedAllowedLinearError = ALLOWED_LINEAR_ERROR
+  world.integrationParameters.normalizedPredictionDistance = PREDICTION_DISTANCE
 
   buildStaticGround(world, course)
   buildEggObstacles(world, course)
