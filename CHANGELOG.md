@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.9.10](https://github.com/Endika/gurpil/compare/v0.9.9...v0.9.10) (2026-08-26)
+
+
+### Bug Fixes
+
+* **physics:** pin the contact tolerances the shape gates were tuned against ([052502c](https://github.com/Endika/gurpil/commit/052502c8765ee16075d2f6193ccb3db6a914a226))
+
+
+### Chores
+
+* bump @commitlint/cli from 21.2.1 to 21.2.2 ([#54](https://github.com/Endika/gurpil/issues/54)) ([b564cc9](https://github.com/Endika/gurpil/commit/b564cc92dbc6873c0adeb077554cb0b92331157b))
+* bump @types/three from 0.185.3 to 0.185.4 ([#52](https://github.com/Endika/gurpil/issues/52)) ([0f6af74](https://github.com/Endika/gurpil/commit/0f6af749bf4cb4f706c3b1030ee218f7382c3c06))
+* bump @typescript-eslint/eslint-plugin from 8.65.0 to 8.66.0 ([#47](https://github.com/Endika/gurpil/issues/47)) ([0d75ec2](https://github.com/Endika/gurpil/commit/0d75ec281cddbb3ecccbfe2f5e19f2673edf615c))
+* bump @typescript-eslint/eslint-plugin from 8.66.0 to 8.67.0 ([#53](https://github.com/Endika/gurpil/issues/53)) ([e94de38](https://github.com/Endika/gurpil/commit/e94de3851852c62d2cb80c98a3d1db77303475a4))
+* bump eslint from 10.8.0 to 10.8.1 ([#48](https://github.com/Endika/gurpil/issues/48)) ([fc31caa](https://github.com/Endika/gurpil/commit/fc31caa3ba8536b31bb0d581bf1a9d2b78d16836))
+* bump js-yaml in the security-npm group across 1 directory ([#46](https://github.com/Endika/gurpil/issues/46)) ([e6e1ec4](https://github.com/Endika/gurpil/commit/e6e1ec47149013db18daf29be84ce357401aafcc))
+* bump vite from 8.2.0 to 8.2.1 ([#50](https://github.com/Endika/gurpil/issues/50)) ([ab18834](https://github.com/Endika/gurpil/commit/ab18834ff84c24b21346ecefdae21fe3d3a91064))
+
 ## [0.9.9](https://github.com/Endika/gurpil/compare/v0.9.8...v0.9.9) (2026-08-04)
 
 
