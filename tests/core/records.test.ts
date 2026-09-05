@@ -20,7 +20,7 @@ function createMemoryStore(): KeyValueStore {
   const map = new Map<string, string>()
   return {
     get: (key) => map.get(key) ?? null,
-    set: (key, value) => {
+    set: (key, value): void => {
       map.set(key, value)
     },
   }

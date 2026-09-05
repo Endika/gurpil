@@ -31,9 +31,9 @@ npm install
 npm run dev        # local dev server
 npm run build      # production build (dist/)
 npm run preview    # serve the production build
-npm run lint       # ESLint (0 warnings allowed)
-npm run typecheck  # TypeScript strict check (no emit)
-npm run test       # Vitest unit + integration tests
+npm run lint       # ESLint over src + tests (0 warnings allowed)
+npm run type:check # TypeScript strict check (no emit)
+npm run test:run   # Vitest unit + integration tests
 ```
 
 ## Tech stack

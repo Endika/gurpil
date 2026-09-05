@@ -22,6 +22,7 @@ import {
   type DifficultyTier,
   type TerrainKind,
 } from '../../src/core/course'
+import type { Point } from '../../src/core/classifyStroke'
 import { createWorld } from '../../src/physics/world'
 import { createVehicle } from '../../src/physics/vehicle'
 import type { ShapeId } from '../../src/core/shapes'
@@ -189,10 +190,10 @@ function avgOver(difficulty: DifficultyTier, seeds: number, fn: (c: Course) => n
 
 describe('generateCourse — difficulty monotonicity', () => {
   const SEEDS = 40
-  const totalLen = (c: Course) => c.finishX - c.startX
-  const hazardCount = (c: Course) => c.zones.length - 2 // minus start + end flats
-  const eggCount = (c: Course) => c.obstacles.length
-  const maxY = (c: Course) => Math.max(...c.ground.map((p) => p.y))
+  const totalLen = (c: Course): number => c.finishX - c.startX
+  const hazardCount = (c: Course): number => c.zones.length - 2 // minus start + end flats
+  const eggCount = (c: Course): number => c.obstacles.length
+  const maxY = (c: Course): number => Math.max(...c.ground.map((p) => p.y))
 
   it('hard is longer than medium, which is longer than easy (on average)', () => {
     const e = avgOver('easy', SEEDS, totalLen)
@@ -401,7 +402,7 @@ describe('generateCourse — Stage-3 feature completability (real engine)', () =
 const BASE_Y = 0
 
 /** Ground points strictly inside [zone.xStart, zone.xEnd]. */
-function pointsInZone(course: Course, zone: { xStart: number; xEnd: number }) {
+function pointsInZone(course: Course, zone: { xStart: number; xEnd: number }): Point[] {
   return course.ground.filter((p) => p.x >= zone.xStart && p.x <= zone.xEnd)
 }
 
