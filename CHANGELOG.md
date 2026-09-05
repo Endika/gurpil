@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.12](https://github.com/Endika/gurpil/compare/v0.9.11...v0.9.12) (2026-09-05)
+
+
+### Chores
+
+* add prettier and a format:check gate ([0b7c959](https://github.com/Endika/gurpil/commit/0b7c95980f4523adf2efab0d6932eec537805c7d))
+
 ## [0.9.11](https://github.com/Endika/gurpil/compare/v0.9.10...v0.9.11) (2026-09-05)
 
 
