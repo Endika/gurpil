@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.9.11](https://github.com/Endika/gurpil/compare/v0.9.10...v0.9.11) (2026-09-05)
+
+
+### Chores
+
+* bump @dimforge/rapier2d-compat from 0.19.3 to 0.20.0 ([#51](https://github.com/Endika/gurpil/issues/51)) ([39d4178](https://github.com/Endika/gurpil/commit/39d4178a8a2003af0701cf1bc4544c0e1454d03f))
+* bump @typescript-eslint/eslint-plugin from 8.67.0 to 8.68.0 ([#63](https://github.com/Endika/gurpil/issues/63)) ([5858fd5](https://github.com/Endika/gurpil/commit/5858fd556de5813c188eb57e251216b1becef92a))
+* bump @typescript-eslint/parser from 8.67.0 to 8.68.0 ([#61](https://github.com/Endika/gurpil/issues/61)) ([b84b4ae](https://github.com/Endika/gurpil/commit/b84b4ae664749bdf6dcb6beff26a3740d358ace2))
+* bump eslint from 10.8.1 to 10.9.0 ([#59](https://github.com/Endika/gurpil/issues/59)) ([57c6ee1](https://github.com/Endika/gurpil/commit/57c6ee1eb8d5dc1761591d326cac477bb171679a))
+* bump eslint from 10.9.0 to 10.9.1 ([#62](https://github.com/Endika/gurpil/issues/62)) ([951415d](https://github.com/Endika/gurpil/commit/951415d45ce7223e26b2e1639ee63f8f832e9445))
+* bump the security-npm group across 1 directory with 2 updates ([#64](https://github.com/Endika/gurpil/issues/64)) ([9ee4182](https://github.com/Endika/gurpil/commit/9ee418207988664bfb6a7b35c93929f754165815))
+* bump vite from 8.2.1 to 8.2.2 ([#58](https://github.com/Endika/gurpil/issues/58)) ([67016ff](https://github.com/Endika/gurpil/commit/67016ffeb064be34d954524947199a18d4910627))
+* bump vitest from 4.1.10 to 4.1.11 ([#60](https://github.com/Endika/gurpil/issues/60)) ([da772cb](https://github.com/Endika/gurpil/commit/da772cb44e00098682fa67c0df54f69241c78f36))
+* **ci:** extend lint and type checks to the test suite ([ba2ea21](https://github.com/Endika/gurpil/commit/ba2ea2192cec9e05e9f92491a6a2dd10ae7401fe))
+
 ## [0.9.10](https://github.com/Endika/gurpil/compare/v0.9.9...v0.9.10) (2026-08-26)
 
 
