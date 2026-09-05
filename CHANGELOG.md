@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.13](https://github.com/Endika/gurpil/compare/v0.9.12...v0.9.13) (2026-09-05)
+
+
+### Chores
+
+* ignore the prettier reformat in git blame ([04bacb4](https://github.com/Endika/gurpil/commit/04bacb44c5fac9f2a868b1e090f1479b212d669e))
+
 ## [0.9.12](https://github.com/Endika/gurpil/compare/v0.9.11...v0.9.12) (2026-09-05)
 
 
