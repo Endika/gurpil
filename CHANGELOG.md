@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.14](https://github.com/Endika/gurpil/compare/v0.9.13...v0.9.14) (2026-09-05)
+
+
+### Chores
+
+* run the four CI gates in pre-commit ([8dc95ee](https://github.com/Endika/gurpil/commit/8dc95ee8bc389cdf37a66d50bca86273e5481da5))
+
 ## [0.9.13](https://github.com/Endika/gurpil/compare/v0.9.12...v0.9.13) (2026-09-05)
 
 
