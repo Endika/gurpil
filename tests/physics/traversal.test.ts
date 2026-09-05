@@ -140,7 +140,9 @@ describe('uphill grip gate (from a dead stop)', () => {
   for (const shape of GRIPPY_SHAPES) {
     it(`grippy ${shape} grips the slippery ramp and reaches the finish`, async () => {
       const { maxX, finishStep } = await driveFromRest(shape, 5, 2, GRIPPY_MAX_STEPS)
-      console.log(`[traversal] grippy ${shape} finished at step ${finishStep} (maxX=${maxX.toFixed(1)})`)
+      console.log(
+        `[traversal] grippy ${shape} finished at step ${finishStep} (maxX=${maxX.toFixed(1)})`,
+      )
       expect(finishStep, `${shape} never reached the finish`).toBeGreaterThan(0)
       expect(maxX).toBeGreaterThanOrEqual(X_FINISH)
     }, 30000)
@@ -306,9 +308,10 @@ describe('no dead-end: swapping to a grippy shape recovers a ramp slip', () => {
 
     expect(reachedRamp, 'the circle should at least reach the ramp').toBe(true)
     expect(swapped, 'the run should swap to a triangle at the ramp').toBe(true)
-    expect(finishStep, 'after swapping to a triangle the run should reach the finish').toBeGreaterThan(
-      0,
-    )
+    expect(
+      finishStep,
+      'after swapping to a triangle the run should reach the finish',
+    ).toBeGreaterThan(0)
     expect(maxX).toBeGreaterThanOrEqual(X_FINISH)
   }, 30000)
 })

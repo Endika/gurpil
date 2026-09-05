@@ -39,12 +39,7 @@ export function startRun(s: RunState): RunState {
  * - When racing and vehicleX >= finishX, transition to 'finished'.
  * - Defends against negative dtMs (clamps to 0).
  */
-export function tickRun(
-  s: RunState,
-  dtMs: number,
-  vehicleX: number,
-  finishX: number,
-): RunState {
+export function tickRun(s: RunState, dtMs: number, vehicleX: number, finishX: number): RunState {
   // Clamp negative dtMs to 0 (defensive).
   const safeDtMs = Math.max(0, dtMs)
 

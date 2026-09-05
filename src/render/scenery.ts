@@ -229,7 +229,12 @@ export interface ScatterPoint {
  * yields the same points — no Math.random, so rebuilding the scenery for the
  * same course never shuffles it.
  */
-export function scatterAlongCourse(startX: number, endX: number, spacing: number, seed: number): ScatterPoint[] {
+export function scatterAlongCourse(
+  startX: number,
+  endX: number,
+  spacing: number,
+  seed: number,
+): ScatterPoint[] {
   const points: ScatterPoint[] = []
   if (endX <= startX || spacing <= 0) return points
   let i = 0
@@ -252,7 +257,14 @@ const scratchScale = new THREE.Vector3()
 const scratchQuat = new THREE.Quaternion()
 const scratchMatrix = new THREE.Matrix4()
 
-function matrixAt(x: number, y: number, z: number, sx: number, sy: number, sz: number): THREE.Matrix4 {
+function matrixAt(
+  x: number,
+  y: number,
+  z: number,
+  sx: number,
+  sy: number,
+  sz: number,
+): THREE.Matrix4 {
   scratchPos.set(x, y, z)
   scratchScale.set(sx, sy, sz)
   return scratchMatrix.compose(scratchPos, scratchQuat, scratchScale)
@@ -320,7 +332,12 @@ interface ForestBand {
  * (fog-affected) InstancedMeshes — cheap, deterministic, no shadows.
  */
 function buildForestBand(theme: Theme): ForestBand {
-  const points = scatterAlongCourse(-FOREST_BAND_HALF_WIDTH, FOREST_BAND_HALF_WIDTH, FOREST_BAND_SPACING, SEED_FOREST)
+  const points = scatterAlongCourse(
+    -FOREST_BAND_HALF_WIDTH,
+    FOREST_BAND_HALF_WIDTH,
+    FOREST_BAND_SPACING,
+    SEED_FOREST,
+  )
 
   // Split points into cone vs blob canopies deterministically (by hash).
   const coneIndices: number[] = []
@@ -400,7 +417,12 @@ function buildTrees(course: Course, theme: Theme): THREE.Group {
   const group = new THREE.Group()
   const rangeLen = course.finishX - course.startX + 2 * COURSE_MARGIN
   const spacing = spacingForBudget(rangeLen, TREE_BASE_SPACING, MAX_TREE_INSTANCES)
-  const points = scatterAlongCourse(course.startX - COURSE_MARGIN, course.finishX + COURSE_MARGIN, spacing, SEED_TREES)
+  const points = scatterAlongCourse(
+    course.startX - COURSE_MARGIN,
+    course.finishX + COURSE_MARGIN,
+    spacing,
+    SEED_TREES,
+  )
   const count = points.length
   if (count === 0) return group
 
@@ -436,14 +458,28 @@ function buildTrees(course: Course, theme: Theme): THREE.Group {
     const trunkScaleXZ = lerpRange(radiusHash, TRUNK_RADIUS_SCALE_MIN, TRUNK_RADIUS_SCALE_MAX)
     trunkMesh.setMatrixAt(i, matrixAt(x, groundY, z, trunkScaleXZ, trunkHeight, trunkScaleXZ))
 
-    const foliageLowRadius = lerpRange(foliageLowHash, FOLIAGE_LOW_RADIUS_MIN, FOLIAGE_LOW_RADIUS_MAX)
+    const foliageLowRadius = lerpRange(
+      foliageLowHash,
+      FOLIAGE_LOW_RADIUS_MIN,
+      FOLIAGE_LOW_RADIUS_MAX,
+    )
     const foliageLowY = groundY + trunkHeight + foliageLowRadius * 0.4
-    foliageLowMesh.setMatrixAt(i, matrixAt(x, foliageLowY, z, foliageLowRadius, foliageLowRadius, foliageLowRadius))
+    foliageLowMesh.setMatrixAt(
+      i,
+      matrixAt(x, foliageLowY, z, foliageLowRadius, foliageLowRadius, foliageLowRadius),
+    )
     foliageLowMesh.setColorAt(i, new THREE.Color(pickFromHash(colorHashLow, theme.foliage)))
 
-    const foliageHighRadius = lerpRange(foliageHighHash, FOLIAGE_HIGH_RADIUS_MIN, FOLIAGE_HIGH_RADIUS_MAX)
+    const foliageHighRadius = lerpRange(
+      foliageHighHash,
+      FOLIAGE_HIGH_RADIUS_MIN,
+      FOLIAGE_HIGH_RADIUS_MAX,
+    )
     const foliageHighY = foliageLowY + foliageLowRadius * 0.7 + foliageHighRadius * 0.6
-    foliageHighMesh.setMatrixAt(i, matrixAt(x, foliageHighY, z, foliageHighRadius, foliageHighRadius, foliageHighRadius))
+    foliageHighMesh.setMatrixAt(
+      i,
+      matrixAt(x, foliageHighY, z, foliageHighRadius, foliageHighRadius, foliageHighRadius),
+    )
     foliageHighMesh.setColorAt(i, new THREE.Color(pickFromHash(colorHashHigh, theme.foliage)))
   }
 
@@ -472,12 +508,21 @@ function buildTrees(course: Course, theme: Theme): THREE.Group {
 function buildBushes(course: Course, theme: Theme): THREE.InstancedMesh | null {
   const rangeLen = course.finishX - course.startX + 2 * COURSE_MARGIN
   const spacing = spacingForBudget(rangeLen, BUSH_BASE_SPACING, MAX_BUSH_INSTANCES)
-  const points = scatterAlongCourse(course.startX - COURSE_MARGIN, course.finishX + COURSE_MARGIN, spacing, SEED_BUSHES)
+  const points = scatterAlongCourse(
+    course.startX - COURSE_MARGIN,
+    course.finishX + COURSE_MARGIN,
+    spacing,
+    SEED_BUSHES,
+  )
   const count = points.length
   if (count === 0) return null
 
   const geo = new THREE.SphereGeometry(1, 8, 6)
-  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: BUSH_ROUGHNESS, metalness: 0 })
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    roughness: BUSH_ROUGHNESS,
+    metalness: 0,
+  })
   const mesh = new THREE.InstancedMesh(geo, mat, count)
 
   for (let i = 0; i < count; i++) {
@@ -511,7 +556,12 @@ function buildBushes(course: Course, theme: Theme): THREE.InstancedMesh | null {
 function buildClouds(course: Course, theme: Theme): THREE.InstancedMesh | null {
   const rangeLen = course.finishX - course.startX + 2 * COURSE_MARGIN
   const spacing = spacingForBudget(rangeLen, CLOUD_BASE_SPACING, MAX_CLOUD_CLUSTERS)
-  const clusters = scatterAlongCourse(course.startX - COURSE_MARGIN, course.finishX + COURSE_MARGIN, spacing, SEED_CLOUDS)
+  const clusters = scatterAlongCourse(
+    course.startX - COURSE_MARGIN,
+    course.finishX + COURSE_MARGIN,
+    spacing,
+    SEED_CLOUDS,
+  )
   const count = clusters.length * CLOUD_PUFFS_PER_CLUSTER
   if (count === 0) return null
 
@@ -531,7 +581,8 @@ function buildClouds(course: Course, theme: Theme): THREE.InstancedMesh | null {
     const heightHash = sceneryHash(SEED_CLOUDS + c * 4.4 + 0.6)
     const z = lerpRange(zHash, CLOUD_Z_MAX, CLOUD_Z_MIN)
     const groundY = sampleGroundY(course.ground, cluster.x)
-    const clusterY = groundY + lerpRange(heightHash, CLOUD_HEIGHT_ABOVE_GROUND_MIN, CLOUD_HEIGHT_ABOVE_GROUND_MAX)
+    const clusterY =
+      groundY + lerpRange(heightHash, CLOUD_HEIGHT_ABOVE_GROUND_MIN, CLOUD_HEIGHT_ABOVE_GROUND_MAX)
 
     for (let puff = 0; puff < CLOUD_PUFFS_PER_CLUSTER; puff++) {
       const offsetHashX = sceneryHash(SEED_CLOUDS + c * 13.7 + puff * 2.2)
@@ -545,7 +596,14 @@ function buildClouds(course: Course, theme: Theme): THREE.InstancedMesh | null {
 
       mesh.setMatrixAt(
         idx,
-        matrixAt(cluster.x + offsetX, clusterY + offsetY, z, radius, radius * CLOUD_FLATTEN, radius),
+        matrixAt(
+          cluster.x + offsetX,
+          clusterY + offsetY,
+          z,
+          radius,
+          radius * CLOUD_FLATTEN,
+          radius,
+        ),
       )
       mesh.setColorAt(idx, new THREE.Color(pickFromHash(colorHash, theme.cloud)))
       idx++
@@ -569,7 +627,12 @@ function buildGrass(course: Course, theme: Theme): THREE.Group {
   const group = new THREE.Group()
   const rangeLen = course.finishX - course.startX + 2 * COURSE_MARGIN
   const spacing = spacingForBudget(rangeLen, GRASS_BASE_SPACING, MAX_GRASS_INSTANCES)
-  const points = scatterAlongCourse(course.startX - COURSE_MARGIN, course.finishX + COURSE_MARGIN, spacing, SEED_GRASS)
+  const points = scatterAlongCourse(
+    course.startX - COURSE_MARGIN,
+    course.finishX + COURSE_MARGIN,
+    spacing,
+    SEED_GRASS,
+  )
   if (points.length === 0) return group
 
   const grassPoints: ScatterPoint[] = []
@@ -582,7 +645,11 @@ function buildGrass(course: Course, theme: Theme): THREE.Group {
   if (grassPoints.length > 0) {
     const geo = new THREE.ConeGeometry(GRASS_RADIUS, 1, 5)
     geo.translate(0, 0.5, 0) // base at local y=0, tip at y=1 → scale.y = world height
-    const mat = new THREE.MeshStandardMaterial({ color: theme.grass, roughness: GRASS_ROUGHNESS, metalness: 0 })
+    const mat = new THREE.MeshStandardMaterial({
+      color: theme.grass,
+      roughness: GRASS_ROUGHNESS,
+      metalness: 0,
+    })
     const mesh = new THREE.InstancedMesh(geo, mat, grassPoints.length)
     for (let i = 0; i < grassPoints.length; i++) {
       const p = grassPoints[i]
@@ -599,7 +666,11 @@ function buildGrass(course: Course, theme: Theme): THREE.Group {
 
   if (flowerPoints.length > 0) {
     const geo = new THREE.SphereGeometry(FLOWER_RADIUS, 6, 5)
-    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: FLOWER_ROUGHNESS, metalness: 0 })
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: FLOWER_ROUGHNESS,
+      metalness: 0,
+    })
     const mesh = new THREE.InstancedMesh(geo, mat, flowerPoints.length)
     for (let i = 0; i < flowerPoints.length; i++) {
       const p = flowerPoints[i]

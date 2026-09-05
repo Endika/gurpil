@@ -375,12 +375,43 @@ const CANONICAL_EGGS_Y = UPHILL_PEAK_Y - (X_ICE_END - X_MUD_END) * ICE_DOWNHILL_
 
 const CANONICAL_SEGMENTS: SegmentDef[] = [
   { kind: 'flat', xStart: X_START, xEnd: X_FLAT_END, friction: FRICTION_BASE, y: () => BASE_Y },
-  { kind: 'rocky', xStart: X_FLAT_END, xEnd: X_ROCKY_END, friction: FRICTION_BASE, y: canonicalRockyY, curved: true },
-  { kind: 'uphill', xStart: X_ROCKY_END, xEnd: X_UPHILL_END, friction: FRICTION_UPHILL, y: canonicalUphillY },
-  { kind: 'mud', xStart: X_UPHILL_END, xEnd: X_MUD_END, friction: FRICTION_MUD, y: () => UPHILL_PEAK_Y },
+  {
+    kind: 'rocky',
+    xStart: X_FLAT_END,
+    xEnd: X_ROCKY_END,
+    friction: FRICTION_BASE,
+    y: canonicalRockyY,
+    curved: true,
+  },
+  {
+    kind: 'uphill',
+    xStart: X_ROCKY_END,
+    xEnd: X_UPHILL_END,
+    friction: FRICTION_UPHILL,
+    y: canonicalUphillY,
+  },
+  {
+    kind: 'mud',
+    xStart: X_UPHILL_END,
+    xEnd: X_MUD_END,
+    friction: FRICTION_MUD,
+    y: () => UPHILL_PEAK_Y,
+  },
   { kind: 'ice', xStart: X_MUD_END, xEnd: X_ICE_END, friction: FRICTION_ICE, y: canonicalIceY },
-  { kind: 'eggs', xStart: X_ICE_END, xEnd: X_EGGS_END, friction: FRICTION_BASE, y: () => CANONICAL_EGGS_Y },
-  { kind: 'flat', xStart: X_EGGS_END, xEnd: X_FINISH, friction: FRICTION_BASE, y: () => CANONICAL_EGGS_Y },
+  {
+    kind: 'eggs',
+    xStart: X_ICE_END,
+    xEnd: X_EGGS_END,
+    friction: FRICTION_BASE,
+    y: () => CANONICAL_EGGS_Y,
+  },
+  {
+    kind: 'flat',
+    xStart: X_EGGS_END,
+    xEnd: X_FINISH,
+    friction: FRICTION_BASE,
+    y: () => CANONICAL_EGGS_Y,
+  },
 ]
 
 /**
@@ -648,12 +679,16 @@ function uphillZone(rng: Rng, xStart: number, p: DifficultyParams): BuiltZone {
 
 function mudZone(rng: Rng, xStart: number, p: DifficultyParams): BuiltZone {
   const len = Math.round(randRange(rng, p.mudLen[0], p.mudLen[1]))
-  return { seg: { kind: 'mud', xStart, xEnd: xStart + len, friction: FRICTION_MUD, y: () => BASE_Y } }
+  return {
+    seg: { kind: 'mud', xStart, xEnd: xStart + len, friction: FRICTION_MUD, y: () => BASE_Y },
+  }
 }
 
 function iceZone(rng: Rng, xStart: number, p: DifficultyParams): BuiltZone {
   const len = Math.round(randRange(rng, p.iceLen[0], p.iceLen[1]))
-  return { seg: { kind: 'ice', xStart, xEnd: xStart + len, friction: FRICTION_ICE, y: () => BASE_Y } }
+  return {
+    seg: { kind: 'ice', xStart, xEnd: xStart + len, friction: FRICTION_ICE, y: () => BASE_Y },
+  }
 }
 
 function eggsZone(rng: Rng, xStart: number, p: DifficultyParams): BuiltZone {
@@ -866,7 +901,11 @@ function lerp(a: number, b: number, t: number): number {
 }
 
 /** Interpolate an inclusive numeric range between two tiers at ramp progress t. */
-function lerpRange(a: readonly [number, number], b: readonly [number, number], t: number): [number, number] {
+function lerpRange(
+  a: readonly [number, number],
+  b: readonly [number, number],
+  t: number,
+): [number, number] {
   return [lerp(a[0], b[0], t), lerp(a[1], b[1], t)]
 }
 
@@ -885,7 +924,10 @@ function endlessParamsAt(t: number): DifficultyParams {
     flatEndLen: ENDLESS_END_FLAT_LEN,
     // hazardCount is unused in the endless loop (we place zones until the target
     // length), but keep a sensible interpolated value for shape completeness.
-    hazardCount: [Math.round(lerp(lo.hazardCount[0], hi.hazardCount[0], c)), Math.round(lerp(lo.hazardCount[1], hi.hazardCount[1], c))],
+    hazardCount: [
+      Math.round(lerp(lo.hazardCount[0], hi.hazardCount[0], c)),
+      Math.round(lerp(lo.hazardCount[1], hi.hazardCount[1], c)),
+    ],
     hazards: endlessHazardsAt(c),
     hillGrade: lerpRange(lo.hillGrade, hi.hillGrade, c),
     hillLen: lerpRange(lo.hillLen, hi.hillLen, c),

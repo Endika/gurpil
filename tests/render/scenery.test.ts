@@ -7,7 +7,12 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { sceneryHash, sampleGroundY, scatterAlongCourse, spacingForBudget } from '../../src/render/scenery'
+import {
+  sceneryHash,
+  sampleGroundY,
+  scatterAlongCourse,
+  spacingForBudget,
+} from '../../src/render/scenery'
 
 describe('sceneryHash', () => {
   it('is deterministic: same seed yields the same value', () => {

@@ -79,7 +79,10 @@ const LINE_RADIAL_SEGMENTS = 12
  * Uint16Array — NO Three.js constructors — so this function is testable
  * in Node without WebGL.
  */
-export function wheelTriangleData(r: number, depth: number): {
+export function wheelTriangleData(
+  r: number,
+  depth: number,
+): {
   positions: Float32Array
   indices: Uint16Array
   normals: Float32Array
@@ -89,12 +92,24 @@ export function wheelTriangleData(r: number, depth: number): {
   // 6 vertices: front face (z=+d) + back face (z=-d)
   // v0..v2: front face CCW, v3..v5: back face
   const positions = new Float32Array([
-    -r, -r, d, // v0 front bottom-left
-    r, -r, d, // v1 front bottom-right
-    0, r, d, // v2 front apex
-    -r, -r, -d, // v3 back  bottom-left
-    r, -r, -d, // v4 back  bottom-right
-    0, r, -d, // v5 back  apex
+    -r,
+    -r,
+    d, // v0 front bottom-left
+    r,
+    -r,
+    d, // v1 front bottom-right
+    0,
+    r,
+    d, // v2 front apex
+    -r,
+    -r,
+    -d, // v3 back  bottom-left
+    r,
+    -r,
+    -d, // v4 back  bottom-right
+    0,
+    r,
+    -d, // v5 back  apex
   ])
 
   // Triangles:
@@ -104,11 +119,7 @@ export function wheelTriangleData(r: number, depth: number): {
   //   side left:   2,0,3  2,3,5
   //   side right:  1,4,5  1,5,2
   const indices = new Uint16Array([
-    0, 1, 2,
-    3, 5, 4,
-    0, 3, 4, 0, 4, 1,
-    2, 0, 3, 2, 3, 5,
-    1, 4, 5, 1, 5, 2,
+    0, 1, 2, 3, 5, 4, 0, 3, 4, 0, 4, 1, 2, 0, 3, 2, 3, 5, 1, 4, 5, 1, 5, 2,
   ])
 
   // Flat normals per face (approximate — good enough for MeshLambertMaterial)
@@ -170,11 +181,7 @@ export function wheelGeometry(shape: ShapeId): THREE.BufferGeometry {
     }
 
     case 'square': {
-      return new THREE.BoxGeometry(
-        WHEEL_VISUAL_RADIUS * 2,
-        WHEEL_VISUAL_RADIUS * 2,
-        WHEEL_DEPTH,
-      )
+      return new THREE.BoxGeometry(WHEEL_VISUAL_RADIUS * 2, WHEEL_VISUAL_RADIUS * 2, WHEEL_DEPTH)
     }
 
     case 'triangle': {

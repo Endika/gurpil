@@ -37,7 +37,12 @@ import type { Vehicle } from '../physics/vehicle'
 import type { Medal } from '../core/medal'
 import { SHAPES } from '../core/shapes'
 import type { ShapeId } from '../core/shapes'
-import { buildTerrainMesh, buildObstacleMeshes, buildGroundBackdrop, TERRAIN_FRONT_Z } from './terrain'
+import {
+  buildTerrainMesh,
+  buildObstacleMeshes,
+  buildGroundBackdrop,
+  TERRAIN_FRONT_Z,
+} from './terrain'
 import { wheelGeometry, wheelGeometryBounds, WHEEL_VISUAL_RADIUS } from './wheelMesh'
 import { buildScenery } from './scenery'
 
@@ -602,7 +607,12 @@ function buildDustPool(theme: Theme): Particle[] {
   const base = new THREE.Color(theme.groundBackdrop)
   const light = base.clone().lerp(new THREE.Color(0xffffff), DUST_LIGHTEN)
   const mid = base.clone().lerp(light, 0.5)
-  return buildParticlePool(DUST_POOL_SIZE, geometry, [light.getHex(), mid.getHex()], THREE.NormalBlending)
+  return buildParticlePool(
+    DUST_POOL_SIZE,
+    geometry,
+    [light.getHex(), mid.getHex()],
+    THREE.NormalBlending,
+  )
 }
 
 // ─── Water splash ───────────────────────────────────────────────────────────────
@@ -687,7 +697,11 @@ function updateSplash(
         THREE.MathUtils.randFloat(SPLASH_VEL_Y_MIN, SPLASH_VEL_Y_MAX),
         0,
       )
-      p.mesh.position.set(wheelXs[wheelIndex], wheelYs[wheelIndex] + WHEEL_CONTACT_OFFSET_Y, SPLASH_Z)
+      p.mesh.position.set(
+        wheelXs[wheelIndex],
+        wheelYs[wheelIndex] + WHEEL_CONTACT_OFFSET_Y,
+        SPLASH_Z,
+      )
       p.mesh.scale.setScalar(p.baseSize)
       ;(p.mesh.material as THREE.MeshBasicMaterial).opacity = 1
       p.mesh.visible = true
@@ -721,7 +735,12 @@ const CHECKPOINT_COLORS = [0x7cf6ff, 0xffe66d, 0xff6ec7, 0xa8ff9e]
 
 function buildCheckpointPool(): Particle[] {
   const geometry = new THREE.SphereGeometry(1, PUFF_SPHERE_SEGMENTS_W, PUFF_SPHERE_SEGMENTS_H)
-  return buildParticlePool(CHECKPOINT_POOL_SIZE, geometry, CHECKPOINT_COLORS, THREE.AdditiveBlending)
+  return buildParticlePool(
+    CHECKPOINT_POOL_SIZE,
+    geometry,
+    CHECKPOINT_COLORS,
+    THREE.AdditiveBlending,
+  )
 }
 
 // ─── Medal celebration confetti ─────────────────────────────────────────────────
@@ -775,7 +794,12 @@ function buildConfettiPool(): Particle[] {
   // Placeholder palette at creation — medalCelebration() retints the slots it
   // activates to the earned medal's palette via spawnRadialBurst's
   // colorForIndex, so this initial color is never actually seen.
-  return buildParticlePool(CONFETTI_POOL_SIZE, geometry, CONFETTI_COLORS_BY_MEDAL.gold, THREE.NormalBlending)
+  return buildParticlePool(
+    CONFETTI_POOL_SIZE,
+    geometry,
+    CONFETTI_COLORS_BY_MEDAL.gold,
+    THREE.NormalBlending,
+  )
 }
 
 // ─── Wheel spin marker (spoke) ─────────────────────────────────────────────────
@@ -1231,7 +1255,13 @@ export function createScene(course: Course, theme: Theme): Scene3D {
       // ── Water splash ────────────────────────────────────────────────────────
       const overWater = zoneAt(course, ct.x)?.kind === 'water'
       const splashActive = overWater && Math.abs(forwardSpeed) > SPLASH_MIN_SPEED
-      updateSplash(splashPool, splashActive, [rearWheelX, frontWheelX], [rearWheelY, frontWheelY], dtSec)
+      updateSplash(
+        splashPool,
+        splashActive,
+        [rearWheelX, frontWheelX],
+        [rearWheelY, frontWheelY],
+        dtSec,
+      )
 
       // ── Endless checkpoint / medal celebration integration ──────────────────
       // Spawning itself happens on demand (see checkpointBurst/medalCelebration
@@ -1446,7 +1476,12 @@ function buildVehicleMeshes(): VehicleMeshes {
   })
 
   const stemCollar = new THREE.Mesh(
-    new THREE.CylinderGeometry(STEM_COLLAR_RADIUS, STEM_COLLAR_RADIUS, STEM_COLLAR_HEIGHT, STEM_SEGMENTS),
+    new THREE.CylinderGeometry(
+      STEM_COLLAR_RADIUS,
+      STEM_COLLAR_RADIUS,
+      STEM_COLLAR_HEIGHT,
+      STEM_SEGMENTS,
+    ),
     accentMat,
   )
   stemCollar.position.set(STEM_OFFSET_X, STEM_BASE_Y, CHASSIS_Z)
@@ -1586,7 +1621,12 @@ function buildVehicleMeshes(): VehicleMeshes {
   // ── Stub arms ────────────────────────────────────────────────────────────
   // Tiny stub arms reaching forward toward the (raised) handlebar; reuses
   // bodyMat since they're an extension of the torso.
-  const armGeo = new THREE.CapsuleGeometry(ARM_RADIUS, ARM_LENGTH, ARM_CAP_SEGMENTS, ARM_RADIAL_SEGMENTS)
+  const armGeo = new THREE.CapsuleGeometry(
+    ARM_RADIUS,
+    ARM_LENGTH,
+    ARM_CAP_SEGMENTS,
+    ARM_RADIAL_SEGMENTS,
+  )
   for (const side of [-1, 1]) {
     const arm = new THREE.Mesh(armGeo, bodyMat)
     arm.position.set(ARM_OFFSET_X, ARM_OFFSET_Y, MONIGOTE_Z + side * ARM_Z_OFFSET)
@@ -1691,7 +1731,13 @@ function buildSparkPool(): Spark[] {
     })
     const mesh = new THREE.Mesh(geometry, material)
     mesh.visible = false
-    sparks.push({ mesh, velocity: new THREE.Vector3(), life: 0, maxLife: 1, baseSize: SPARK_SIZE_MIN })
+    sparks.push({
+      mesh,
+      velocity: new THREE.Vector3(),
+      life: 0,
+      maxLife: 1,
+      baseSize: SPARK_SIZE_MIN,
+    })
   }
   return sparks
 }
@@ -1705,7 +1751,13 @@ function buildSparkPool(): Spark[] {
  * Sparks live in world space, so `rearWheelX`/`rearWheelY` must already be
  * world coordinates (not group-local).
  */
-function updateSparks(sparks: Spark[], forwardSpeed: number, rearWheelX: number, rearWheelY: number, dtSec: number): void {
+function updateSparks(
+  sparks: Spark[],
+  forwardSpeed: number,
+  rearWheelX: number,
+  rearWheelY: number,
+  dtSec: number,
+): void {
   const atMaxSpeed = Math.abs(forwardSpeed) >= SPARK_SPEED_THRESHOLD
   let spawnedThisFrame = 0
 
@@ -1741,7 +1793,11 @@ function updateSparks(sparks: Spark[], forwardSpeed: number, rearWheelX: number,
         THREE.MathUtils.randFloat(SPARK_VEL_Y_MIN, SPARK_VEL_Y_MAX),
         0,
       )
-      spark.mesh.position.set(rearWheelX + SPARK_EMIT_OFFSET_X, rearWheelY + SPARK_EMIT_OFFSET_Y, SPARK_Z)
+      spark.mesh.position.set(
+        rearWheelX + SPARK_EMIT_OFFSET_X,
+        rearWheelY + SPARK_EMIT_OFFSET_Y,
+        SPARK_Z,
+      )
       spark.mesh.scale.setScalar(spark.baseSize)
       ;(spark.mesh.material as THREE.MeshBasicMaterial).opacity = 1
       spark.mesh.visible = true

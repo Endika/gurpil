@@ -86,9 +86,7 @@ describe('FLAT differentiation', () => {
     const start = { x: 5, y: 3 }
     for (const shape of SHAPE_IDS) {
       const { dx } = await runOnCourse(shape, start, 1, 300)
-      expect(dx, `${shape} should not be stuck on the flat`).toBeGreaterThan(
-        MIN_FLAT_PROGRESS,
-      )
+      expect(dx, `${shape} should not be stuck on the flat`).toBeGreaterThan(MIN_FLAT_PROGRESS)
     }
   })
 

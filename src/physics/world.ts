@@ -115,9 +115,7 @@ function buildEggObstacles(world: RAPIER.World, course: Course): void {
   for (const obs of course.obstacles) {
     if (obs.kind !== 'egg') continue
 
-    const body = world.createRigidBody(
-      RAPIER.RigidBodyDesc.fixed().setTranslation(obs.x, obs.y),
-    )
+    const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(obs.x, obs.y))
     world.createCollider(RAPIER.ColliderDesc.ball(EGG_RADIUS), body)
   }
 }

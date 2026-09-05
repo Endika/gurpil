@@ -37,9 +37,7 @@ export function pickLocale(languageTag: string | undefined | null): string {
     return DEFAULT_LOCALE
   }
   const primary = languageTag.split('-')[0]?.toLowerCase()
-  return primary !== undefined && SUPPORTED_LOCALES.includes(primary)
-    ? primary
-    : DEFAULT_LOCALE
+  return primary !== undefined && SUPPORTED_LOCALES.includes(primary) ? primary : DEFAULT_LOCALE
 }
 
 function detectLocale(): string {

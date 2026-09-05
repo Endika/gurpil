@@ -22,7 +22,7 @@ beforeAll(async () => {
 
 /** Placement: centre of flat start zone, well above ground so it settles. */
 const START_X = 10
-const START_Y = 3   // above flat ground at y=0; chassis settles to ~0.65
+const START_Y = 3 // above flat ground at y=0; chassis settles to ~0.65
 
 /** Steps to let the vehicle settle before applying throttle. */
 const SETTLE_STEPS = 60

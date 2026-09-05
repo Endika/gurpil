@@ -68,8 +68,7 @@ function isRecord(value: unknown): value is Record {
   const candidate = value as { bestMs?: unknown; bestMedal?: unknown }
   const bestMsOk = candidate.bestMs === null || typeof candidate.bestMs === 'number'
   const bestMedalOk =
-    typeof candidate.bestMedal === 'string' &&
-    VALID_MEDALS.includes(candidate.bestMedal as Medal)
+    typeof candidate.bestMedal === 'string' && VALID_MEDALS.includes(candidate.bestMedal as Medal)
   return bestMsOk && bestMedalOk
 }
 

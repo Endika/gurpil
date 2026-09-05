@@ -1,11 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  createRun,
-  startRun,
-  tickRun,
-  resetRun,
-  type RunPhase,
-} from '../../src/core/run'
+import { createRun, startRun, tickRun, resetRun, type RunPhase } from '../../src/core/run'
 
 describe('Run state machine', () => {
   describe('createRun', () => {

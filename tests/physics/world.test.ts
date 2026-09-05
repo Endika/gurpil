@@ -35,9 +35,7 @@ async function dropBall(
   const course = buildCourse()
   const pw = await createWorld(course)
 
-  const dynBody = pw.raw.createRigidBody(
-    RAPIER.RigidBodyDesc.dynamic().setTranslation(x, y),
-  )
+  const dynBody = pw.raw.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(x, y))
   pw.raw.createCollider(RAPIER.ColliderDesc.ball(0.3), dynBody)
 
   const yHistory: number[] = []
