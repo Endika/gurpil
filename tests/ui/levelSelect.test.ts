@@ -5,7 +5,7 @@ import {
   endlessCardView,
   themeMessageKey,
 } from '../../src/ui/levelSelect'
-import { CAMPAIGN, CAMPAIGN_SIZE, levelByNumber } from '../../src/core/campaign'
+import { CAMPAIGN, CAMPAIGN_SIZE, levelByNumber, type Level } from '../../src/core/campaign'
 import { saveLevelResult, saveEndlessDistance, type KeyValueStore } from '../../src/core/records'
 import { THEME_IDS } from '../../src/core/theme'
 
@@ -14,13 +14,13 @@ function createMemoryStore(): KeyValueStore {
   const map = new Map<string, string>()
   return {
     get: (key) => map.get(key) ?? null,
-    set: (key, value) => {
+    set: (key, value): void => {
       map.set(key, value)
     },
   }
 }
 
-function level(n: number) {
+function level(n: number): Level {
   const l = levelByNumber(n)
   if (l === undefined) throw new Error(`no level ${n}`)
   return l
