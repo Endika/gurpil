@@ -28,7 +28,9 @@ describe('serializePendingRace / parsePendingRace — campaign level', () => {
   })
 
   it('returns null for a level number above the campaign size', () => {
-    expect(parsePendingRace(JSON.stringify({ mode: 'level', number: CAMPAIGN_SIZE + 1 }))).toBeNull()
+    expect(
+      parsePendingRace(JSON.stringify({ mode: 'level', number: CAMPAIGN_SIZE + 1 })),
+    ).toBeNull()
   })
 })
 

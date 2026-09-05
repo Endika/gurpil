@@ -84,7 +84,12 @@
   font-weight: 800;
   line-height: 1.05;
   letter-spacing: -0.01em;
-  background: linear-gradient(135deg, var(--gurpil-coral), var(--gurpil-yellow), var(--gurpil-mint));
+  background: linear-gradient(
+    135deg,
+    var(--gurpil-coral),
+    var(--gurpil-yellow),
+    var(--gurpil-mint)
+  );
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
@@ -203,7 +208,9 @@
 
   cursor: pointer;
   touch-action: manipulation;
-  transition: transform 0.1s ease, filter 0.15s ease;
+  transition:
+    transform 0.1s ease,
+    filter 0.15s ease;
 }
 
 .hud-mute-btn:active {
@@ -281,7 +288,9 @@
   border-radius: var(--gurpil-radius-lg);
   border: 1px solid var(--gurpil-card-border);
   background: var(--gurpil-card-bg);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 
   animation: gurpil-pop-in 0.32s var(--gurpil-ease) both;
 }
@@ -328,7 +337,9 @@
   width: 0.65rem;
   height: 0.65rem;
   border-radius: 50%;
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.2), 0 1px 3px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.2),
+    0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 /* ─── Action buttons (large mobile tap targets) ─────────────────────────── */
@@ -356,7 +367,10 @@
 
   cursor: pointer;
   touch-action: manipulation;
-  transition: transform 0.1s ease, filter 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    transform 0.1s ease,
+    filter 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .hud-btn:active {
@@ -444,12 +458,18 @@
   /* Per-card tint (theme skyHorizon), set inline as --level-tint. The tint
    * fades out quickly so text stays legible even on the palest biomes
    * (snow / grassland / desert). */
-  background: linear-gradient(160deg, var(--level-tint, var(--gurpil-teal)) 0%, rgba(15, 15, 30, 0.82) 42%);
+  background: linear-gradient(
+    160deg,
+    var(--level-tint, var(--gurpil-teal)) 0%,
+    rgba(15, 15, 30, 0.82) 42%
+  );
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
 
   cursor: pointer;
   touch-action: manipulation;
-  transition: transform 0.1s ease, box-shadow 0.15s ease;
+  transition:
+    transform 0.1s ease,
+    box-shadow 0.15s ease;
   animation: gurpil-pop-in 0.3s var(--gurpil-ease) both;
   animation-delay: calc(var(--card-i, 0) * 28ms);
 }
@@ -555,7 +575,9 @@
 
   cursor: pointer;
   touch-action: manipulation;
-  transition: transform 0.1s ease, box-shadow 0.15s ease;
+  transition:
+    transform 0.1s ease,
+    box-shadow 0.15s ease;
   animation: gurpil-pop-in 0.3s var(--gurpil-ease) 0.42s both;
 }
 

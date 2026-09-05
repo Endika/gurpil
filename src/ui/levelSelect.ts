@@ -191,7 +191,10 @@ function buildCard(level: Level, opts: LevelSelectOptions): HTMLElement {
     card.appendChild(lockedLabel)
 
     card.disabled = true
-    card.setAttribute('aria-label', `${t('levelSelect.level')} ${level.number} — ${t('levelSelect.locked')}`)
+    card.setAttribute(
+      'aria-label',
+      `${t('levelSelect.level')} ${level.number} — ${t('levelSelect.locked')}`,
+    )
     return card
   }
 

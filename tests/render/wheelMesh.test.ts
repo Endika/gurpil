@@ -157,8 +157,8 @@ describe('wheelTriangleData', () => {
 
   it('apex vertex is at (0, +r)', () => {
     const { positions } = wheelTriangleData(r, depth)
-    expect(positions[6]).toBeCloseTo(0, 5)  // v2 x
-    expect(positions[7]).toBeCloseTo(r, 5)  // v2 y
+    expect(positions[6]).toBeCloseTo(0, 5) // v2 x
+    expect(positions[7]).toBeCloseTo(r, 5) // v2 y
   })
 
   it('index array covers all face triangles (8 triangles × 3 indices = 24)', () => {

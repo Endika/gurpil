@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  SHAPES,
-  SHAPE_IDS,
-  WHEEL_MASS,
-  type ShapeId,
-} from '../../src/core/shapes'
+import { SHAPES, SHAPE_IDS, WHEEL_MASS, type ShapeId } from '../../src/core/shapes'
 
 describe('Shape catalog', () => {
   describe('Catalog completeness', () => {

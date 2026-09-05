@@ -348,9 +348,10 @@ describe('generateCourse — completability (real engine)', () => {
       it(`${difficulty} seed=${seed} is completable with the right shape sequence`, async () => {
         const course = generateCourse({ difficulty, seed })
         const { maxX, finishX } = await driveToFinish(course)
-        expect(maxX, `did not reach the finish (maxX=${maxX.toFixed(1)}, finishX=${finishX})`).toBeGreaterThanOrEqual(
-          finishX - 3,
-        )
+        expect(
+          maxX,
+          `did not reach the finish (maxX=${maxX.toFixed(1)}, finishX=${finishX})`,
+        ).toBeGreaterThanOrEqual(finishX - 3)
       }, 60000)
     }
   }
@@ -418,7 +419,9 @@ describe('generateCourse — Stage-3 features appear (difficulty-scaled)', () =>
   it('water and bridge appear at every tier; ramps only from easy upward', () => {
     for (const tier of ALL_TIERS) {
       expect(firstSeedWith(tier, 'water'), `${tier} should place water`).toBeGreaterThanOrEqual(0)
-      expect(firstSeedWith(tier, 'bridge'), `${tier} should place bridges`).toBeGreaterThanOrEqual(0)
+      expect(firstSeedWith(tier, 'bridge'), `${tier} should place bridges`).toBeGreaterThanOrEqual(
+        0,
+      )
     }
     // Ramps are deliberately absent at beginner (keeps beginner the flattest tier).
     expect(firstSeedWith('beginner', 'ramp')).toBe(-1)

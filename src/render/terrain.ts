@@ -299,7 +299,8 @@ export function buildTerrainStrip(
     positions[pi + 14] = zApron
 
     const kind = zoneKindAt?.(x)
-    const colorHex = kind !== undefined ? terrainColorForKind(kind, theme) : terrainColorAt(x, theme)
+    const colorHex =
+      kind !== undefined ? terrainColorForKind(kind, theme) : terrainColorAt(x, theme)
     const col = new THREE.Color(colorHex)
     // Back-edge verts (top-back, bot-back) blend toward the ground backdrop's
     // color so the top face fades into it across the strip's depth instead of
@@ -537,7 +538,10 @@ function buildBridgePlanks(zone: Zone, groundY: number, theme: Theme): THREE.Ins
   const positions = bridgePlankPositions(zone.xStart, zone.xEnd, BRIDGE_PLANK_SPACING)
   const plankDepth = TERRAIN_DEPTH - 2 * FEATURE_EDGE_MARGIN
   const geo = new THREE.BoxGeometry(BRIDGE_PLANK_WIDTH_X, BRIDGE_PLANK_HEIGHT, plankDepth)
-  const mat = new THREE.MeshStandardMaterial({ color: theme.terrain.bridge, roughness: BRIDGE_PLANK_ROUGHNESS })
+  const mat = new THREE.MeshStandardMaterial({
+    color: theme.terrain.bridge,
+    roughness: BRIDGE_PLANK_ROUGHNESS,
+  })
   const mesh = new THREE.InstancedMesh(geo, mat, positions.length)
   const midZ = (TERRAIN_FRONT_Z + TERRAIN_BACK_Z) / 2
   const m = new THREE.Matrix4()
@@ -560,7 +564,10 @@ function buildBridgeRailPosts(zone: Zone, groundY: number, theme: Theme): THREE.
     BRIDGE_RAIL_POST_HEIGHT,
     BRIDGE_RAIL_POST_SEGMENTS,
   )
-  const mat = new THREE.MeshStandardMaterial({ color: theme.terrain.bridgeRail, roughness: BRIDGE_RAIL_ROUGHNESS })
+  const mat = new THREE.MeshStandardMaterial({
+    color: theme.terrain.bridgeRail,
+    roughness: BRIDGE_RAIL_ROUGHNESS,
+  })
   const mesh = new THREE.InstancedMesh(geo, mat, positions.length * 2)
   const m = new THREE.Matrix4()
   let idx = 0
@@ -580,7 +587,10 @@ function buildBridgeRailBars(zone: Zone, groundY: number, theme: Theme): THREE.G
   const group = new THREE.Group()
   const len = zone.xEnd - zone.xStart
   const geo = new THREE.BoxGeometry(len, BRIDGE_RAIL_THICKNESS, BRIDGE_RAIL_THICKNESS)
-  const mat = new THREE.MeshStandardMaterial({ color: theme.terrain.bridgeRail, roughness: BRIDGE_RAIL_ROUGHNESS })
+  const mat = new THREE.MeshStandardMaterial({
+    color: theme.terrain.bridgeRail,
+    roughness: BRIDGE_RAIL_ROUGHNESS,
+  })
   for (const z of [DECOR_ROW_NEAR_Z, DECOR_ROW_FAR_Z]) {
     const rail = new THREE.Mesh(geo, mat)
     rail.position.set(zone.xStart + len / 2, groundY + BRIDGE_RAIL_HEIGHT_Y, z)
@@ -620,7 +630,10 @@ const RAMP_STRUT_ROUGHNESS = 0.7
 function buildRampLip(peak: Point, theme: Theme): THREE.Mesh {
   const depth = TERRAIN_DEPTH - 2 * FEATURE_EDGE_MARGIN
   const geo = new THREE.BoxGeometry(RAMP_LIP_WIDTH_X, RAMP_LIP_HEIGHT, depth)
-  const mat = new THREE.MeshStandardMaterial({ color: theme.terrain.rampAccent, roughness: RAMP_LIP_ROUGHNESS })
+  const mat = new THREE.MeshStandardMaterial({
+    color: theme.terrain.rampAccent,
+    roughness: RAMP_LIP_ROUGHNESS,
+  })
   const mesh = new THREE.Mesh(geo, mat)
   mesh.position.set(peak.x, peak.y + RAMP_LIP_Y_OFFSET, (TERRAIN_FRONT_Z + TERRAIN_BACK_Z) / 2)
   mesh.castShadow = true
@@ -630,13 +643,22 @@ function buildRampLip(peak: Point, theme: Theme): THREE.Mesh {
 
 /** A single diagonal support beam along the ramp's up-face, from its base to
  *  its peak, at one of the two DECOR_ROW depth rows (see OCCLUSION SAFETY). */
-function buildRampStrut(baseX: number, baseY: number, peak: Point, z: number, theme: Theme): THREE.Mesh {
+function buildRampStrut(
+  baseX: number,
+  baseY: number,
+  peak: Point,
+  z: number,
+  theme: Theme,
+): THREE.Mesh {
   const dx = peak.x - baseX
   const dy = peak.y - baseY
   const length = Math.hypot(dx, dy)
   const angle = Math.atan2(dy, dx)
   const geo = new THREE.BoxGeometry(length, RAMP_STRUT_THICKNESS, RAMP_STRUT_THICKNESS)
-  const mat = new THREE.MeshStandardMaterial({ color: theme.terrain.rampAccent, roughness: RAMP_STRUT_ROUGHNESS })
+  const mat = new THREE.MeshStandardMaterial({
+    color: theme.terrain.rampAccent,
+    roughness: RAMP_STRUT_ROUGHNESS,
+  })
   const mesh = new THREE.Mesh(geo, mat)
   mesh.rotation.z = angle
   mesh.position.set((baseX + peak.x) / 2, (baseY + peak.y) / 2 - RAMP_STRUT_Y_DROP, z)

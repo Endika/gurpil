@@ -186,7 +186,9 @@ export function finishNotes(medal: Medal): readonly number[] {
 export function fallScreamFreqHz(elapsedSeconds: number): number {
   const t = Math.min(Math.max(elapsedSeconds, 0), FALL_SCREAM_DURATION_SECONDS)
   const progress = t / FALL_SCREAM_DURATION_SECONDS
-  return FALL_SCREAM_START_FREQ_HZ * (FALL_SCREAM_END_FREQ_HZ / FALL_SCREAM_START_FREQ_HZ) ** progress
+  return (
+    FALL_SCREAM_START_FREQ_HZ * (FALL_SCREAM_END_FREQ_HZ / FALL_SCREAM_START_FREQ_HZ) ** progress
+  )
 }
 
 // ─── Mute persistence (storage-agnostic, never throws) ─────────────────────
@@ -312,10 +314,7 @@ function playFallScream(context: AudioContext): void {
   const gain = context.createGain()
   gain.gain.setValueAtTime(0, startAt)
   gain.gain.linearRampToValueAtTime(FALL_SCREAM_GAIN, startAt + FALL_SCREAM_ATTACK_SECONDS)
-  gain.gain.exponentialRampToValueAtTime(
-    TONE_RELEASE_FLOOR,
-    startAt + FALL_SCREAM_DURATION_SECONDS,
-  )
+  gain.gain.exponentialRampToValueAtTime(TONE_RELEASE_FLOOR, startAt + FALL_SCREAM_DURATION_SECONDS)
 
   osc.connect(gain)
   gain.connect(context.destination)

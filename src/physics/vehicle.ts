@@ -176,9 +176,7 @@ export function createVehicle(world: PhysicsWorld, at: Point): Vehicle {
   // targets, so once the car had settled `setThrottle()` silently did nothing
   // and the car was stuck forever. Keeping the chassis + wheels permanently
   // awake guarantees the motor always responds.
-  const chassisDesc = RAPIER.RigidBodyDesc.dynamic()
-    .setTranslation(at.x, at.y)
-    .setCanSleep(false)
+  const chassisDesc = RAPIER.RigidBodyDesc.dynamic().setTranslation(at.x, at.y).setCanSleep(false)
   const chassis = raw.createRigidBody(chassisDesc)
 
   const chassisCollider = RAPIER.ColliderDesc.cuboid(CHASSIS_HALF_W, CHASSIS_HALF_H)
@@ -221,10 +219,7 @@ export function createVehicle(world: PhysicsWorld, at: Point): Vehicle {
 
     // Revolute joint: anchor1 = wheel offset in chassis local frame,
     //                 anchor2 = wheel centre in wheel local frame (origin).
-    const jointData = RAPIER.JointData.revolute(
-      { x: offset.x, y: offset.y },
-      { x: 0, y: 0 },
-    )
+    const jointData = RAPIER.JointData.revolute({ x: offset.x, y: offset.y }, { x: 0, y: 0 })
 
     const joint = raw.createImpulseJoint(
       jointData,
