@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.17](https://github.com/Endika/gurpil/compare/v0.9.16...v0.9.17) (2026-09-10)
+
+
+### Chores
+
+* bump vitest from 4.1.11 to 5.0.0 ([60e91ad](https://github.com/Endika/gurpil/commit/60e91ada82a39d62f59b7d093c7c93cc5ebe34c6))
+
 ## [0.9.16](https://github.com/Endika/gurpil/compare/v0.9.15...v0.9.16) (2026-09-10)
 
 
