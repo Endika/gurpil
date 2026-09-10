@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.16](https://github.com/Endika/gurpil/compare/v0.9.15...v0.9.16) (2026-09-10)
+
+
+### Chores
+
+* bump @typescript-eslint/eslint-plugin from 8.68.0 to 8.69.0 ([360078e](https://github.com/Endika/gurpil/commit/360078e2c16888e82184ab88dc796f1492a14a95))
+* bump eslint from 10.9.1 to 10.10.0 ([90768d1](https://github.com/Endika/gurpil/commit/90768d1b7e0299972d442925b3f14990100d18fb))
+
 ## [0.9.15](https://github.com/Endika/gurpil/compare/v0.9.14...v0.9.15) (2026-09-10)
 
 
