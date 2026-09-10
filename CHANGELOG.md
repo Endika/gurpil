@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.15](https://github.com/Endika/gurpil/compare/v0.9.14...v0.9.15) (2026-09-10)
+
+
+### Chores
+
+* bump @typescript-eslint/parser from 8.68.0 to 8.69.0 ([b06eb45](https://github.com/Endika/gurpil/commit/b06eb4561dcaf56419e8d1e25bc79a4814e6a60e))
+
 ## [0.9.14](https://github.com/Endika/gurpil/compare/v0.9.13...v0.9.14) (2026-09-05)
 
 
