@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.18](https://github.com/Endika/gurpil/compare/v0.9.17...v0.9.18) (2026-09-16)
+
+
+### Bug Fixes
+
+* **deps:** bump js-yaml to 4.3.2 ([d1a63b5](https://github.com/Endika/gurpil/commit/d1a63b5d238bdcd6945104e52b3838426251fa3d))
+
 ## [0.9.17](https://github.com/Endika/gurpil/compare/v0.9.16...v0.9.17) (2026-09-10)
 
 
