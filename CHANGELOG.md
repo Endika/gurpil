@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/Endika/gurpil/compare/v0.10.0...v0.11.0) (2026-09-16)
+
+
+### Features
+
+* **ci:** add CodeQL static analysis ([ff7aa85](https://github.com/Endika/gurpil/commit/ff7aa85bf6754574e835f15481c23b4b10937f8e))
+
 ## [0.10.0](https://github.com/Endika/gurpil/compare/v0.9.18...v0.10.0) (2026-09-16)
 
 
