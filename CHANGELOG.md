@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/Endika/gurpil/compare/v0.9.18...v0.10.0) (2026-09-16)
+
+
+### Features
+
+* **ci:** block PRs that introduce high-severity dependency advisories ([43b0d66](https://github.com/Endika/gurpil/commit/43b0d66115373343c869547dfc638e863ac06800))
+
 ## [0.9.18](https://github.com/Endika/gurpil/compare/v0.9.17...v0.9.18) (2026-09-16)
 
 
