@@ -125,6 +125,14 @@ describe('loadRecord / saveResult', () => {
     store.set('gurpil.record.easy', JSON.stringify({ bestMs: 100, bestMedal: 'platinum' }))
     expect(loadRecord(store, 'easy')).toEqual(emptyRecord())
   })
+
+  it('saveResult after an unreadable record simply writes the new result (unreadable → empty, as today)', () => {
+    const store = createMemoryStore()
+    store.set('gurpil.record.easy', 'not json{{{')
+    const result = saveResult(store, 'easy', 9000, 'bronze')
+    expect(result).toEqual({ bestMs: 9000, bestMedal: 'bronze' })
+    expect(loadRecord(store, 'easy')).toEqual({ bestMs: 9000, bestMedal: 'bronze' })
+  })
 })
 
 describe('loadLevelRecord / saveLevelResult (per-level)', () => {
@@ -180,6 +188,14 @@ describe('loadLevelRecord / saveLevelResult (per-level)', () => {
     store.set('gurpil.levelRecord.1', JSON.stringify({ foo: 'bar' }))
     expect(loadLevelRecord(store, 1)).toEqual(emptyRecord())
   })
+
+  it('saveLevelResult after an unreadable record simply writes the new result (unreadable → empty, as today)', () => {
+    const store = createMemoryStore()
+    store.set('gurpil.levelRecord.5', JSON.stringify({ bestMs: 1, bestMedal: 'unknown-medal' }))
+    const result = saveLevelResult(store, 5, 9000, 'bronze')
+    expect(result).toEqual({ bestMs: 9000, bestMedal: 'bronze' })
+    expect(loadLevelRecord(store, 5)).toEqual({ bestMs: 9000, bestMedal: 'bronze' })
+  })
 })
 
 describe('isLevelUnlocked / highestUnlocked', () => {
@@ -216,10 +232,25 @@ describe('isLevelUnlocked / highestUnlocked', () => {
     expect(isLevelUnlocked(store, 1.5)).toBe(false)
   })
 
-  it('treats corrupt predecessor storage as not-beaten (stays locked)', () => {
+  it('treats corrupt predecessor storage as not-beaten when the level itself has no record either', () => {
     const store = createMemoryStore()
     store.set('gurpil.levelRecord.1', 'not json{{{')
     expect(isLevelUnlocked(store, 2)).toBe(false)
+  })
+
+  it('does not re-lock a level that has its own valid record, even if its corrupt predecessor looks unbeaten', () => {
+    const store = createMemoryStore()
+    saveLevelResult(store, 1, 5000, 'gold')
+    saveLevelResult(store, 2, 4000, 'silver')
+    saveLevelResult(store, 3, 3000, 'gold')
+    // Level 2's record gets corrupted after the fact (e.g. a storage glitch).
+    store.set('gurpil.levelRecord.2', 'not json{{{')
+    // Level 2 itself stays playable (its OWN unlock only depends on level 1).
+    expect(isLevelUnlocked(store, 2)).toBe(true)
+    // Level 3 must not re-lock: it has its own valid finish, which could only
+    // exist if it had already been unlocked and played before the corruption.
+    expect(isLevelUnlocked(store, 3)).toBe(true)
+    expect(highestUnlocked(store)).toBe(4)
   })
 
   it('highestUnlocked is 1 on a fresh store', () => {
@@ -301,6 +332,14 @@ describe('loadEndlessBest / saveEndlessDistance', () => {
     saveLevelResult(store, 1, 5000, 'gold')
     expect(loadEndlessBest(store)).toBe(0)
   })
+
+  it('saveEndlessDistance after an unreadable best simply writes the new distance (unreadable → 0, as today)', () => {
+    const store = createMemoryStore()
+    store.set('gurpil.endless.best', 'not a number')
+    const result = saveEndlessDistance(store, 300)
+    expect(result).toBe(300)
+    expect(loadEndlessBest(store)).toBe(300)
+  })
 })
 
 describe('isEndlessUnlocked', () => {
@@ -324,5 +363,33 @@ describe('isEndlessUnlocked', () => {
     const store = createMemoryStore()
     store.set(`gurpil.levelRecord.${CAMPAIGN_SIZE}`, 'not json{{{')
     expect(isEndlessUnlocked(store)).toBe(false)
+  })
+})
+
+// ─── Format guards ──────────────────────────────────────────────────────────
+//
+// Each fixture below is exactly what the real save path writes today (built
+// with saveResult/saveLevelResult/saveEndlessDistance, then frozen as a
+// literal). It stands in for data already sitting in a real player's storage.
+// If a future change alters the stored shape without a migration, these old
+// bytes stop parsing as valid and silently fall back to empty/0 — these tests
+// catch that by asserting the CURRENT loader still reads them complete.
+describe("format guards — a fixture in today's format must still load complete", () => {
+  it('per-difficulty record', () => {
+    const store = createMemoryStore()
+    store.set('gurpil.record.hard', '{"bestMs":4200,"bestMedal":"gold"}')
+    expect(loadRecord(store, 'hard')).toEqual({ bestMs: 4200, bestMedal: 'gold' })
+  })
+
+  it('per-level record', () => {
+    const store = createMemoryStore()
+    store.set('gurpil.levelRecord.7', '{"bestMs":4200,"bestMedal":"gold"}')
+    expect(loadLevelRecord(store, 7)).toEqual({ bestMs: 4200, bestMedal: 'gold' })
+  })
+
+  it('endless best distance', () => {
+    const store = createMemoryStore()
+    store.set('gurpil.endless.best', '1234.5')
+    expect(loadEndlessBest(store)).toBe(1234.5)
   })
 })

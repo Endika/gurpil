@@ -153,26 +153,50 @@ export function saveLevelResult(
 //
 // Level 1 is always unlocked; every later level unlocks once its PREDECESSOR
 // has been BEATEN. "Beaten" = has any recorded finish (a stored best time),
-// regardless of medal — finishing at all is enough to progress. Corrupt/missing
-// storage yields an empty record (no best time), so everything beyond level 1
+// regardless of medal — finishing at all is enough to progress. Missing
+// storage (never played) yields an empty record, so everything beyond level 1
 // stays locked until the player actually finishes.
+//
+// A CORRUPT predecessor record is different from a missing one: it means the
+// level WAS played (something was written there) but we can no longer read
+// it. Treating that the same as "never played" would re-lock every later
+// level even when THEY have their own perfectly valid records — which could
+// only exist if the player had already unlocked and beaten them. So a level
+// with its own valid finish is considered unlocked regardless of whether its
+// predecessor's record is now unreadable.
 
 /** Has this level ever been finished (has a recorded best time)? */
 function isLevelBeaten(store: KeyValueStore, levelNumber: number): boolean {
   return loadLevelRecord(store, levelNumber).bestMs !== null
 }
 
+/** Is this level's stored record present but unparseable (as opposed to
+ *  simply never having been saved)? */
+function isLevelRecordUnreadable(store: KeyValueStore, levelNumber: number): boolean {
+  const raw = store.get(keyForLevel(levelNumber))
+  if (raw === null) return false
+  try {
+    return !isRecord(JSON.parse(raw))
+  } catch {
+    return true
+  }
+}
+
 /**
  * Is the given campaign level unlocked? Level 1 is always unlocked; level N
- * (1 < N ≤ CAMPAIGN_SIZE) is unlocked iff level N-1 has been beaten. Numbers
- * outside 1 … CAMPAIGN_SIZE are never unlocked.
+ * (1 < N ≤ CAMPAIGN_SIZE) is unlocked iff level N-1 has been beaten, OR (when
+ * N-1's record is corrupt rather than merely missing) level N itself already
+ * has a valid recorded finish — proof it was unlocked before the corruption.
+ * Numbers outside 1 … CAMPAIGN_SIZE are never unlocked.
  */
 export function isLevelUnlocked(store: KeyValueStore, levelNumber: number): boolean {
   if (!Number.isInteger(levelNumber) || levelNumber < 1 || levelNumber > CAMPAIGN_SIZE) {
     return false
   }
   if (levelNumber === 1) return true
-  return isLevelBeaten(store, levelNumber - 1)
+  if (isLevelBeaten(store, levelNumber - 1)) return true
+  if (!isLevelRecordUnreadable(store, levelNumber - 1)) return false
+  return isLevelBeaten(store, levelNumber)
 }
 
 /**
