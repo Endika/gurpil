@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1](https://github.com/Endika/gurpil/compare/v0.11.0...v0.11.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* never re-lock levels after a bad record read ([d5a5ade](https://github.com/Endika/gurpil/commit/d5a5ade77b302fc0cb2f9c9f0a077cbf7869fefa))
+
 ## [0.11.0](https://github.com/Endika/gurpil/compare/v0.10.0...v0.11.0) (2026-09-16)
 
 
