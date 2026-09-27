@@ -35,14 +35,14 @@ export interface TerrainColors {
   ice: number
   eggs: number
   runOut: number
-  // ── Stage-3 terrain-variety features ──
+  // ── Terrain-variety features ──
   /** Jump-ramp take-off surface. */
   ramp: number
   /** Water crossing (ford) surface — blue/ice/lava-variant per theme. */
   water: number
   /** Wooden bridge deck. */
   bridge: number
-  // ── Stage-4 terrain geometry accents (real geometry over the flat zones) ──
+  // ── Terrain geometry accents (real geometry over the flat zones) ──
   /** Lighter tint for the water surface's second, subtly-offset ripple layer. */
   waterHighlight: number
   /** Bridge railing (posts + rail bar) — distinct from the deck plank color. */

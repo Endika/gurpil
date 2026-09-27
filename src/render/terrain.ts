@@ -369,7 +369,7 @@ export function buildTerrainStrip(
   return { positions, colors, indices }
 }
 
-// ─── Stage-4 terrain feature geometry (water / bridge / ramp) ─────────────────
+// ─── Terrain feature geometry (water / bridge / ramp) ─────────────────────────
 //
 // Water, bridges and ramps used to be pure COLOR over the flat/ramp ground.
 // This section adds real decorative geometry on top of the existing

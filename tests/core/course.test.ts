@@ -297,7 +297,7 @@ function idealShape(kind: TerrainKind): ShapeId {
     case 'mud':
     case 'ice':
       return 'triangle'
-    // The Stage-3 features are all traversable ground; the fast circle handles
+    // Ramp, water and bridge are all traversable ground; the fast circle handles
     // them well (grippy ramp it climbs and launches off, flat water/bridge it
     // rolls straight across).
     case 'ramp':
@@ -357,14 +357,14 @@ describe('generateCourse — completability (real engine)', () => {
   }
 })
 
-// ─── Stage-3 feature completability (real engine) ─────────────────────────────
+// ─── Ramp / water / bridge completability (real engine) ───────────────────────
 //
 // Directly proves the NEW features are clearable: for every tier that can place a
 // feature we find the first seed whose track actually CONTAINS it, then drive that
 // track start→finish on the real Rapier engine. A ramp launches and lands; a water
 // ford and a bridge are crossed — none is ever a dead-end or a pit.
 
-describe('generateCourse — Stage-3 feature completability (real engine)', () => {
+describe('generateCourse — ramp/water/bridge completability (real engine)', () => {
   beforeAll(async () => {
     await RAPIER.init()
   })
@@ -394,7 +394,7 @@ describe('generateCourse — Stage-3 feature completability (real engine)', () =
   }
 })
 
-// ─── Stage-3 terrain-variety features (ramp / water / bridge) ──────────────────
+// ─── Terrain-variety features (ramp / water / bridge) ─────────────────────────
 //
 // New traversable-ground features added for variety. Every one begins AND ends at
 // the BASE_Y baseline (0) so it composes in any random order, and none is ever a
@@ -415,7 +415,7 @@ function firstSeedWith(difficulty: DifficultyTier, kind: TerrainKind, limit = 20
   return -1
 }
 
-describe('generateCourse — Stage-3 features appear (difficulty-scaled)', () => {
+describe('generateCourse — ramp/water/bridge appear (difficulty-scaled)', () => {
   it('water and bridge appear at every tier; ramps only from easy upward', () => {
     for (const tier of ALL_TIERS) {
       expect(firstSeedWith(tier, 'water'), `${tier} should place water`).toBeGreaterThanOrEqual(0)
@@ -449,7 +449,7 @@ describe('generateCourse — Stage-3 features appear (difficulty-scaled)', () =>
   })
 })
 
-describe('generateCourse — Stage-3 feature structural invariants', () => {
+describe('generateCourse — ramp/water/bridge structural invariants', () => {
   it('ramps rise above base, never dip below it, and land back flat at base', () => {
     const seed = firstSeedWith('expert', 'ramp')
     const course = generateCourse({ difficulty: 'expert', seed })

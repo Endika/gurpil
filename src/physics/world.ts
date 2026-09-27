@@ -21,7 +21,7 @@ const GRAVITY = { x: 0, y: -9.81 } as const
  * Physics fixed timestep in seconds (1/60 s ≈ 16.67 ms per tick).
  *
  * This is the single source of truth for the physics dt. `createWorld`
- * writes it to `world.timestep`, and the Task 12 game loop must use the
+ * writes it to `world.timestep`, and the game loop (src/game/loop.ts) must use the
  * same value for its fixed-step accumulator so the two never drift.
  */
 export const PHYSICS_TIMESTEP = 1 / 60

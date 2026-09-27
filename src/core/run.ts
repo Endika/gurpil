@@ -3,7 +3,7 @@
  * Idle → racing → finished, with elapsed-time accumulation.
  *
  * Pure module: no Date.now(), no side effects, no time source inside.
- * The game loop (Task 12) passes dtMs and vehicleX; we manage state transitions.
+ * The game loop passes dtMs and vehicleX; we manage state transitions.
  */
 
 export type RunPhase = 'idle' | 'racing' | 'finished'

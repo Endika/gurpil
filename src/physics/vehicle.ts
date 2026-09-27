@@ -18,7 +18,7 @@
  * shape rolls on its ball. The visual mesh (square/triangle/line/circle) is a
  * pure render concern (see `src/render`).
  *
- * Anti-pop mitigation (the #1 risk from the SPIKE): swapping the ball radius can
+ * Anti-pop mitigation: swapping the ball radius can
  * change inertia and produce a velocity/spin "pop". We keep wheel mass FIXED at
  * WHEEL_MASS across all shapes and re-assert each body's pre-swap linear +
  * angular velocity right after the swap. Because the collider stays a ball, this

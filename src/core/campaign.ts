@@ -15,9 +15,6 @@
  *     so adjacent levels look different.
  *   - Each level's `seed` is DERIVED deterministically from its number and is
  *     distinct from every other level's, fixing that level's exact track.
- *
- * Stage 2a is CORE ONLY: this module is not yet wired into the UI or game loop
- * (that is 2b). It just describes the campaign as testable pure data.
  */
 
 import type { DifficultyTier } from './course'

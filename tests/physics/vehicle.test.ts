@@ -1,5 +1,5 @@
 /**
- * Tests for the motorized vehicle (Task 7).
+ * Tests for the motorized vehicle.
  *
  * Uses the REAL Rapier2d engine — no mocks.  Fixed timestep ensures full
  * determinism across runs.  The vehicle is placed on the flat start zone

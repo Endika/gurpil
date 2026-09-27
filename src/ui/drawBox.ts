@@ -12,7 +12,7 @@
  * - Pure helper `strokeToShape` is extracted for unit-testability in node env.
  * - No Three.js / physics imports — only classifyStroke + shapes types + DOM.
  * - Static visual styling (size, position, colors, safe-area insets) lives in
- *   the `.draw-box` rule in src/ui/styles.css (Task 13); only the container's
+ *   the `.draw-box` rule in src/ui/styles.css; only the container's
  *   class name is set here. Dynamic feedback (border flash color) stays
  *   inline since it depends on the classified shape at runtime.
  */

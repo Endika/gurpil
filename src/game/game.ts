@@ -1,7 +1,7 @@
 /**
  * Game orchestrator — wires all subsystems into a playable end-to-end loop.
  *
- * Flow (Stage 2b — campaign):
+ * Flow:
  *   boot → [pending level from a reload?]
  *     ├─ yes → build & run that campaign level directly (skips the grid)
  *     └─ no  → show the LEVEL-SELECT grid (src/ui/levelSelect.ts)

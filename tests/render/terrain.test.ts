@@ -64,7 +64,7 @@ describe('terrainColorAt', () => {
   })
 })
 
-describe('terrainColorForKind (zone-accurate, incl. Stage-3 features)', () => {
+describe('terrainColorForKind (zone-accurate, incl. ramp/water/bridge)', () => {
   it('gives every terrain kind a distinct themed color', () => {
     const kinds: TerrainKind[] = [
       'flat',
@@ -265,7 +265,7 @@ describe('groundBackdropExtent', () => {
   })
 })
 
-describe('sampleGroundY (Stage-4 feature geometry helper)', () => {
+describe('sampleGroundY (feature geometry helper)', () => {
   it('returns the exact y at an existing ground point', () => {
     const ground = [
       { x: 0, y: 0 },
@@ -298,7 +298,7 @@ describe('sampleGroundY (Stage-4 feature geometry helper)', () => {
   })
 })
 
-describe('findRampPeak (Stage-4 feature geometry helper)', () => {
+describe('findRampPeak (feature geometry helper)', () => {
   it('finds the highest point within the given x range', () => {
     const ground = [
       { x: 0, y: 0 },
@@ -328,7 +328,7 @@ describe('findRampPeak (Stage-4 feature geometry helper)', () => {
   })
 })
 
-describe('bridgePlankPositions (Stage-4 feature geometry helper)', () => {
+describe('bridgePlankPositions (feature geometry helper)', () => {
   it('spaces elements evenly across the span with no leftover gap', () => {
     const positions = bridgePlankPositions(0, 16, 4)
     expect(positions.length).toBe(4)

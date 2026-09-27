@@ -2,7 +2,7 @@
  * Campaign — pure data + determinism tests.
  *
  * No Three.js, no Rapier, no DOM: campaign.ts is pure data derived from named
- * constants. These tests guard the campaign contract 2b will build the UI on:
+ * constants. These tests guard the campaign contract the level-select UI builds on:
  * a fixed, deterministic, contiguous, non-decreasing-difficulty, theme-rotating
  * list of distinctly-seeded levels.
  */
