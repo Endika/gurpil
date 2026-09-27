@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@dimforge/rapier2d-compat": "^0.20.0",
-    "three": "^0.186.0"
+    "three": "^0.186.1"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.3",
