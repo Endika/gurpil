@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.3](https://github.com/Endika/gurpil/compare/v0.11.2...v0.11.3) (2026-09-27)
+
+
+### Bug Fixes
+
+* stop the app manifest promising that real physics decides ([8134326](https://github.com/Endika/gurpil/commit/81343263f5c59f87e7703d43b0261e1a4a642128))
+
 ## [0.11.2](https://github.com/Endika/gurpil/compare/v0.11.1...v0.11.2) (2026-09-27)
 
 
