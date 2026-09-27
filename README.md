@@ -1,25 +1,25 @@
 # Gurpil
 
-Offline 3D arcade time-trial: draw your wheel shape mid-race and let real physics decide.
+Offline 3D arcade time-trial: draw your wheel shape mid-race to change how the car drives.
 
 **[Try it now →](https://endika.github.io/gurpil/)**
 
-Gurpil ("wheel" in Basque) is a tiny arcade racer with a twist: your car's wheel isn't
-fixed. Sketch a shape on screen — a circle, a square, a triangle, or a line — and a real
-2D physics engine retunes your wheel (its grip, size, and speed) so each shape drives
-differently. Terrain changes mid-run (flat, rocky, uphill, mud, ice, and egg patches),
-so the fastest players swap their wheel on the fly to suit each stretch and beat the
-clock.
+Gurpil ("wheel" in Basque) is a tiny arcade racer where your car's wheel isn't fixed.
+Sketch a shape on screen — a circle, a square, a triangle, or a line — and the game retunes
+your wheel's grip, size and speed so each shape drives differently. Terrain changes mid-run
+(flat, rocky, uphill, mud, ice, water, bridges, jump ramps, and stretches of logs and
+rocks), so the fastest players swap their wheel on the fly to suit each stretch and beat
+the clock.
 
 ## How to play
 
 1. Watch the terrain ahead and draw a shape with your finger or mouse: a circle rolls
-   fastest on flat ground, a square grips rocky terrain, a triangle claws up hills, and a
-   line slides across ice.
+   fastest on flat ground, a triangle claws up hills, a square grips too but drives
+   slower, and a line's big wheel rolls best over the logs and rocks.
 2. Your stroke is classified into one of the four fixed shapes and swapped onto the car
    live — no reset, no stopping.
 3. Cross the finish line as fast as you can. Picking the wrong shape for the terrain (or
-   hitting an egg patch with a mismatched wheel) costs you time.
+   hitting the logs and rocks with a mismatched wheel) costs you time.
 
 Fully offline once loaded — installable as a PWA, no network required to play. Available
 in English, Spanish, Basque, and French.

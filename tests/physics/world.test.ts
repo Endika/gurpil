@@ -1,5 +1,5 @@
 /**
- * Tests for the Rapier physics world + static terrain (Task 6).
+ * Tests for the Rapier physics world + static terrain.
  *
  * Uses the REAL Rapier2d engine — no mocks.  Because RAPIER.init() is async,
  * all tests are async.  The vitest environment is "node" (set globally in
@@ -62,7 +62,7 @@ describe('createWorld', () => {
     expect(() => pw.step()).not.toThrow()
 
     // the world actually applies PHYSICS_TIMESTEP (guards future drift with
-    // the Task 12 accumulator, which must use the same dt). Precision 6:
+    // the game loop's accumulator, which must use the same dt). Precision 6:
     // Rapier stores dt as float32, so 1/60 round-trips to ~8.7e-10 off the
     // JS double — well within 1e-6, but any real drift (e.g. 1/120) is caught.
     expect(pw.raw.timestep).toBeCloseTo(PHYSICS_TIMESTEP, 6)

@@ -29,7 +29,7 @@ export type TerrainKind =
   | 'mud'
   | 'ice'
   | 'eggs'
-  // ── Stage-3 terrain-variety features (all traversable ground) ──
+  // ── Terrain-variety features (all traversable ground) ──
   /** Up-and-over kicker: a grippy launch ramp with a generous flat landing. */
   | 'ramp'
   /** A flat, slippery/slow water crossing (a ford at road level — never a pit). */
@@ -71,9 +71,8 @@ export interface Course {
 }
 
 /**
- * The three difficulty tiers offered by the Stage-1 difficulty-select MENU.
- * Kept exactly as-is so the existing UI (`difficultySelect`, `pendingRace`) and
- * the per-difficulty records API stay valid without change.
+ * The three original difficulty tiers. The per-difficulty records API
+ * (`records.ts`) is still keyed on them.
  */
 export type Difficulty = 'easy' | 'medium' | 'hard'
 
@@ -81,13 +80,8 @@ export type Difficulty = 'easy' | 'medium' | 'hard'
  * The FULL set of five course difficulty tiers, easiest → hardest, used by the
  * generator, the campaign and the per-level records. It ADDS a gentler
  * `'beginner'` below `'easy'` and a harder `'expert'` above `'hard'`, while
- * keeping the three menu tiers unchanged (`Difficulty` ⊂ `DifficultyTier`, so
- * every existing caller that passes a `Difficulty` still type-checks).
- *
- * (Named separately from `Difficulty` on purpose: the Stage-1 UI hard-codes a
- * `Record<Difficulty, …>` over exactly the three menu tiers, so widening the
- * `Difficulty` symbol itself would break that UI — out of scope for this core
- * stage. 2b will wire the extra tiers into the UI.)
+ * keeping the three original tiers unchanged (`Difficulty` ⊂ `DifficultyTier`,
+ * so every caller that passes a `Difficulty` still type-checks).
  */
 export type DifficultyTier = 'beginner' | Difficulty | 'expert'
 
@@ -159,7 +153,7 @@ const EGG_SPACING = 5
 const EGG_LEAD_IN = 15
 const EGG_TRAIL = 10
 
-// ─── Stage-3 terrain-variety feature constants ────────────────────────────────
+// ─── Terrain-variety feature constants ────────────────────────────────────────
 //
 // JUMP RAMP, WATER and BRIDGE. Every one is TRAVERSABLE GROUND that begins AND
 // ends at BASE_Y, so they compose in any random order exactly like the existing
