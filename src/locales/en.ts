@@ -40,6 +40,8 @@ export const en = {
   'endless.lockedHint': 'Complete the campaign',
   'endless.distance': 'Distance',
   'endless.gameOver': "Time's up!",
+  'error.startFailed': "The game couldn't start. Reload to try again.",
+  'error.reload': 'Reload',
 } as const satisfies Record<string, string>
 
 /** Union of every valid message key, derived from the English source. */

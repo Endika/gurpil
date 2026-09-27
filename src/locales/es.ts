@@ -36,4 +36,6 @@ export const es: Messages = {
   'endless.lockedHint': 'Completa la campaña',
   'endless.distance': 'Distancia',
   'endless.gameOver': '¡Se acabó el tiempo!',
+  'error.startFailed': 'No se ha podido iniciar el juego. Recarga para volver a intentarlo.',
+  'error.reload': 'Recargar',
 }

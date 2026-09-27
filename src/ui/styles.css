@@ -302,6 +302,12 @@
   color: var(--gurpil-mint);
 }
 
+.hud-error-message {
+  margin: 0 0 1rem;
+  font-size: clamp(1.1rem, 4.5vw, 1.4rem);
+  font-weight: 700;
+}
+
 .hud-finish-time {
   margin: 0;
   font-size: clamp(1.2rem, 5vw, 1.8rem);
