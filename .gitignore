@@ -1,6 +1,3 @@
 node_modules
 dist
 .superpowers
-
-# Spec/plan notes live in the sibling ../gurpil-notes/ directory, never committed here
-
