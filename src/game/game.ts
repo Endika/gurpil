@@ -48,6 +48,7 @@ import { createDrawBox } from '../ui/drawBox'
 import { createHud, speedFraction } from '../ui/hud'
 import { createLevelSelect } from '../ui/levelSelect'
 import { createLocalStorageStore } from '../ui/localStorageStore'
+import { showStartFailure } from '../ui/startFailure'
 import { createAudio, type Audio } from '../audio/audio'
 import { createRun, startRun, tickRun } from '../core/run'
 import { createEndless, startEndless, tickEndless } from '../core/endless'
@@ -177,12 +178,14 @@ function showLevelSelect(root: HTMLElement, store: KeyValueStore, audio: Audio):
       select.destroy()
       runLevel(root, store, audio, level).catch((err: unknown) => {
         console.error('[gurpil] level failed to start', err)
+        showStartFailure(root, () => location.reload())
       })
     },
     onEndless: () => {
       select.destroy()
       runEndless(root, store, audio, randomEndlessSeed()).catch((err: unknown) => {
         console.error('[gurpil] endless failed to start', err)
+        showStartFailure(root, () => location.reload())
       })
     },
   })

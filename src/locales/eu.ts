@@ -36,4 +36,6 @@ export const eu: Messages = {
   'endless.lockedHint': 'Osatu kanpaina',
   'endless.distance': 'Distantzia',
   'endless.gameOver': 'Denbora agortu da!',
+  'error.startFailed': 'Ezin izan da jokoa abiarazi. Kargatu berriro saiatzeko.',
+  'error.reload': 'Kargatu berriro',
 }
