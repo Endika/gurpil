@@ -10,7 +10,7 @@ export default defineConfig({
       manifest: {
         name: "Gurpil",
         short_name: "Gurpil",
-        description: "Arcade 2.5D time-trial: draw your wheel shape and let real physics decide.",
+        description: "Arcade 2.5D time-trial: draw your wheel shape to change how the car drives.",
         theme_color: "#1a1a2e",
         background_color: "#0d0d1a",
         display: "standalone",
