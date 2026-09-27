@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.2](https://github.com/Endika/gurpil/compare/v0.11.1...v0.11.2) (2026-09-27)
+
+
+### Bug Fixes
+
+* show an error screen when the game or a race fails to start ([6d7343e](https://github.com/Endika/gurpil/commit/6d7343eedf683174c5f25e998149a1076d8308de))
+
 ## [0.11.1](https://github.com/Endika/gurpil/compare/v0.11.0...v0.11.1) (2026-09-25)
 
 
