@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.4](https://github.com/Endika/gurpil/compare/v0.11.3...v0.11.4) (2026-10-02)
+
+
+### Bug Fixes
+
+* **deps:** bump transitive brace-expansion past GHSA quadratic expansion ([94bd664](https://github.com/Endika/gurpil/commit/94bd664a8fbccc10ae1d9fae0df6dbcc0d58a0d5))
+
 ## [0.11.3](https://github.com/Endika/gurpil/compare/v0.11.2...v0.11.3) (2026-09-27)
 
 
