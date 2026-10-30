@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.5](https://github.com/Endika/gurpil/compare/v0.11.4...v0.11.5) (2026-10-30)
+
+
+### Bug Fixes
+
+* **deps:** bump fast-uri to 3.1.9 and serialize-javascript to 7.1.3 ([401bc72](https://github.com/Endika/gurpil/commit/401bc7260643ce4684b3fd522111ca1cf646f689))
+
 ## [0.11.4](https://github.com/Endika/gurpil/compare/v0.11.3...v0.11.4) (2026-10-02)
 
 
