@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.6](https://github.com/Endika/gurpil/compare/v0.11.5...v0.11.6) (2026-11-05)
+
+
+### Bug Fixes
+
+* **deps:** override minimatch to ^11.0.1 for GHSA-g3hv-75wg-m249 ([9a60f33](https://github.com/Endika/gurpil/commit/9a60f3300d26de6e731d1216c0a691942fbaf3de))
+
 ## [0.11.5](https://github.com/Endika/gurpil/compare/v0.11.4...v0.11.5) (2026-10-30)
 
 
