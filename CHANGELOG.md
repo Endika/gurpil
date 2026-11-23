@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.7](https://github.com/Endika/gurpil/compare/v0.11.6...v0.11.7) (2026-11-23)
+
+
+### Bug Fixes
+
+* **pwa:** precache the app again so installed apps update ([f87c457](https://github.com/Endika/gurpil/commit/f87c457d8a4ceaa17ecea4334782edd1e83114a0))
+
 ## [0.11.6](https://github.com/Endika/gurpil/compare/v0.11.5...v0.11.6) (2026-11-05)
 
 
