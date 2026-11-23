@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && node scripts/check-precache.mjs",
     "preview": "vite preview",
     "lint": "eslint src tests --ext .ts --max-warnings 0",
     "lint:fix": "eslint src tests --ext .ts --fix",
@@ -35,6 +35,9 @@
     "vitest": "^5.1.0"
   },
   "overrides": {
-    "minimatch": "^11.0.1"
+    "minimatch": "^11.0.1",
+    "workbox-build": {
+      "glob": "^13.0.0"
+    }
   }
 }
